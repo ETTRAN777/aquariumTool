@@ -5,5 +5,5 @@ import react from '@vitejs/plugin-react'
 // Base path matches the GitHub Pages repo name. Update if you rename the repo.
 export default defineConfig({
   plugins: [react()],
-  base: '/shrimp-tank-tracker/',
+  base: '/aquariumTool/',
 })

@@ -5,7 +5,7 @@ planner, half weekly journal. Works for any tank: shrimp colonies, livebearers,
 community fish, planted-only builds, or anything else, since what each tank
 tracks is fully customizable.
 
-**[Live demo →](https://YOUR_GITHUB_USERNAME.github.io/shrimp-tank-tracker/)**
+**[Live demo →](https://ETTRAN777.github.io/aquariumTool/)**
 
 ## What it does
 
@@ -56,7 +56,7 @@ npm run dev
 ## Deploying to GitHub Pages
 
 1. Update `base` in `vite.config.ts` if your repo name differs from
-   `shrimp-tank-tracker`.
+   `aquariumTool`.
 2. Push this repo to GitHub.
 3. Run:
 
