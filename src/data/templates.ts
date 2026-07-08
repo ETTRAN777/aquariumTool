@@ -67,6 +67,22 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     ],
   },
   {
+    id: 'solo-fish',
+    name: 'Solo Fish / Centerpiece',
+    description: 'Betta, oscar, or cichlid kept alone — one dominant fish, no tankmates.',
+    suggestedStyle: 'Solo centerpiece fish tank',
+    customFields: [preset('🤒 Signs Of Illness'), preset('🪭 Fin Condition'), preset('📝 Feeding Notes')],
+    checklist: [
+      { label: 'Source tank, substrate, and hardscape' },
+      { label: 'Fill, install filtration, and plant' },
+      { label: 'Begin fishless cycle and daily testing' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present' },
+      { label: 'Quarantine the fish before introducing to the display tank' },
+      { label: 'Acclimate and add the single centerpiece fish — no tankmates' },
+      { label: 'Monitor fin condition and behavior closely for the first two weeks' },
+    ],
+  },
+  {
     id: 'planted',
     name: 'Planted-Only',
     description: 'No livestock focus — tracking growth, trims, and layout.',

@@ -85,7 +85,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
               selected?.id === t.id
                 ? 'border-amber bg-amber/10'
                 : 'border-moss/30 bg-deepwater hover:border-moss/60'
-            } ${t.id === 'blank' ? 'sm:col-span-2' : ''}`}
+            }`}
           >
             <h3 className="font-display text-lg font-semibold">{t.name}</h3>
             <p className="text-sm text-foam-dim mt-1">{t.description}</p>

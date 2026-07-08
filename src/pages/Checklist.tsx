@@ -279,7 +279,7 @@ export default function Checklist() {
         <button
           type="button"
           onClick={() => setShowAddDeps((s) => !s)}
-          className="text-xs text-amber hover:underline"
+          className="block text-xs text-amber hover:underline"
         >
           {showAddDeps
             ? 'Hide dependency picker'
@@ -317,7 +317,7 @@ export default function Checklist() {
           </div>
         )}
 
-        <button type="submit" className="btn btn-secondary">
+        <button type="submit" className="btn btn-secondary block w-full sm:w-auto">
           Add step
         </button>
       </form>

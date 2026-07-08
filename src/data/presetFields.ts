@@ -18,6 +18,7 @@ export const PRESET_FIELDS: PresetField[] = [
   { label: '🐡 Total Fish Count', type: 'number' },
   { label: '🐌 Snail Count', type: 'number' },
   { label: '🤒 Signs Of Illness', type: 'boolean' },
+  { label: '🪭 Fin Condition', type: 'text' },
   { label: '🌱 New Growth Observed', type: 'boolean' },
   { label: '✂️ Trim Needed', type: 'boolean' },
   { label: '📝 Feeding Notes', type: 'text' },
