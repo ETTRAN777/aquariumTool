@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
 import { importData } from '../lib/storage';
@@ -168,6 +169,13 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
           <p className="text-xs text-foam-dim">
             Bring in a tank from another device or an older backup — it's added alongside
             whatever tanks you already have, nothing gets overwritten.
+          </p>
+          <p className="text-xs text-foam-dim mt-2">
+            Don't have a file yet? An AI assistant can generate one from your own build
+            plan —{' '}
+            <Link to="/docs" className="text-amber hover:underline">
+              see the JSON format docs →
+            </Link>
           </p>
         </div>
         <input
