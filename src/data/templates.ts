@@ -1,4 +1,5 @@
 import type { CustomFieldDef, ChecklistTask, Tank } from '../types';
+import { PRESET_FIELDS } from './presetFields';
 
 export interface TankTemplate {
   id: string;
@@ -9,16 +10,24 @@ export interface TankTemplate {
   checklist: Omit<ChecklistTask, 'id' | 'done'>[];
 }
 
+// Pulls a field straight from the shared preset library rather than
+// redefining it here, so a template-created tank and a manually
+// "added from preset" field are always the exact same field — same
+// label, same emoji, same type. Throws at module load if a label typos
+// out of sync with presetFields.ts, which is exactly when we want to know.
+function preset(label: string): Omit<CustomFieldDef, 'id'> {
+  const found = PRESET_FIELDS.find((f) => f.label === label);
+  if (!found) throw new Error(`Template references unknown preset field: "${label}"`);
+  return { label: found.label, type: found.type };
+}
+
 export const TANK_TEMPLATES: TankTemplate[] = [
   {
     id: 'shrimp',
     name: 'Shrimp / Invert Colony',
     description: 'Neocaridina, Caridina, crayfish, or other invert-focused breeder tanks.',
     suggestedStyle: 'Walstad-style shrimp colony',
-    customFields: [
-      { label: 'Population count', type: 'number' },
-      { label: 'Berried / gravid count', type: 'number' },
-    ],
+    customFields: [preset('🦐 Shrimp Census'), preset('🥚 Berried / Gravid Count')],
     checklist: [
       { label: 'Source tank, hardscape, and substrate' },
       { label: 'Layer substrate and place hardscape' },
@@ -33,11 +42,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     name: 'Livebearers & Fry',
     description: 'Guppies, mollies, platies — tanks where fry counts matter.',
     suggestedStyle: 'Community livebearer tank',
-    customFields: [
-      { label: 'Adult count', type: 'number' },
-      { label: 'Fry count', type: 'number' },
-      { label: 'Visibly pregnant females', type: 'number' },
-    ],
+    customFields: [preset('🐠 Adult Count'), preset('🐟 Fry Count'), preset('🤰 Pregnant Females')],
     checklist: [
       { label: 'Source tank, substrate, and hardscape' },
       { label: 'Fill, install filtration, and plant' },
@@ -52,10 +57,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     name: 'Community Fish',
     description: 'Mixed peaceful community fish tanks.',
     suggestedStyle: 'Mixed community tank',
-    customFields: [
-      { label: 'Total fish count', type: 'number' },
-      { label: 'Signs of illness observed', type: 'boolean' },
-    ],
+    customFields: [preset('🐡 Total Fish Count'), preset('🤒 Signs Of Illness')],
     checklist: [
       { label: 'Source tank, substrate, and hardscape' },
       { label: 'Fill, install filtration, and plant' },
@@ -69,10 +71,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     name: 'Planted-Only',
     description: 'No livestock focus — tracking growth, trims, and layout.',
     suggestedStyle: 'Low-tech planted tank',
-    customFields: [
-      { label: 'New growth observed', type: 'boolean' },
-      { label: 'Trim needed', type: 'boolean' },
-    ],
+    customFields: [preset('🌱 New Growth Observed'), preset('✂️ Trim Needed')],
     checklist: [
       { label: 'Source substrate and hardscape' },
       { label: 'Layer substrate and place hardscape' },
