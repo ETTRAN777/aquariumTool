@@ -1,0 +1,195 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@theme {
+  --color-deepwater: #0F2E2B;
+  --color-deepwater-2: #143a35;
+  --color-moss: #3F6B4F;
+  --color-moss-light: #5C8A6C;
+  --color-sand: #C9A876;
+  --color-sand-light: #E0CBA0;
+  --color-amber: #E8A23D;
+  --color-foam: #EDF3EE;
+  --color-foam-dim: #C9D6CE;
+  --color-coral: #B85C4A;
+
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-deepwater);
+  color: var(--color-foam);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-amber);
+  color: var(--color-deepwater);
+}
+
+.waterline {
+  width: 100%;
+  height: 28px;
+  display: block;
+}
+
+.waterline path {
+  fill: var(--color-deepwater-2);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-deepwater);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-moss);
+  border-radius: 6px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- Shared component classes ---- */
+/* Kept centralized so every page reads and behaves the same way,
+   instead of re-declaring the same borders/paddings inline everywhere.
+   Wrapped in @layer components so Tailwind utility classes (e.g. sm:w-40)
+   reliably win when combined with these — unlayered CSS otherwise beats
+   layered Tailwind utilities regardless of source order, which silently
+   broke width overrides like sm:w-40 on a `.field` select. */
+
+@layer components {
+  .field {
+    width: 100%;
+    background: var(--color-deepwater-2);
+    border: 1px solid color-mix(in srgb, var(--color-moss) 30%, transparent);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-foam);
+    -webkit-text-fill-color: var(--color-foam);
+    caret-color: var(--color-amber);
+    color-scheme: dark;
+    transition: border-color 0.15s ease;
+  }
+
+  .field::placeholder {
+    color: color-mix(in srgb, var(--color-foam-dim) 55%, transparent);
+  }
+
+  .field:focus {
+    border-color: var(--color-amber);
+    outline: none;
+  }
+
+  .field-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-foam-dim);
+    margin-bottom: 0.3rem;
+  }
+
+  .card {
+    background: var(--color-deepwater);
+    border: 1px solid color-mix(in srgb, var(--color-moss) 30%, transparent);
+    border-radius: 0.65rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.55rem 1rem;
+    transition: background-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
+    cursor: pointer;
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-amber);
+    color: var(--color-deepwater);
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
+  .btn-secondary {
+    background: var(--color-moss);
+    color: var(--color-foam);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-moss-light);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-foam-dim);
+    border: 1px solid color-mix(in srgb, var(--color-moss) 30%, transparent);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--color-foam);
+    border-color: color-mix(in srgb, var(--color-moss) 55%, transparent);
+  }
+
+  .btn-icon {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.4rem;
+    color: color-mix(in srgb, var(--color-foam-dim) 70%, transparent);
+    background: transparent;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .btn-icon:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-moss) 15%, transparent);
+    color: var(--color-foam);
+  }
+  .btn-icon.danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-coral) 18%, transparent);
+    color: var(--color-coral);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+}
