@@ -1,4 +1,4 @@
-export type SourcingStatus = 'wishlist' | 'ordered' | 'arrived' | 'acclimating' | 'established';
+export type SourcingStatus = 'idea' | 'wishlist' | 'ordered' | 'arrived' | 'acclimating' | 'established';
 
 export interface RosterItem {
   id: string;

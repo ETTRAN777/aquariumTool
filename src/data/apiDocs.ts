@@ -84,7 +84,7 @@ plant, or livestock.
 | category | \`"livestock"\` \\| \`"plant"\` \\| \`"hardscape"\` \\| \`"substrate"\` \\| \`"equipment"\` | yes | |
 | detail | string | no | Context, reasoning, sourcing notes |
 | source | string | no | Vendor name, or e.g. "Seeded from [Other Tank]" for transferred livestock |
-| status | \`"wishlist"\` \\| \`"ordered"\` \\| \`"arrived"\` \\| \`"acclimating"\` \\| \`"established"\` | yes | Start every new item at \`"wishlist"\` unless the user says otherwise |
+| status | \`"idea"\` \\| \`"wishlist"\` \\| \`"ordered"\` \\| \`"arrived"\` \\| \`"acclimating"\` \\| \`"established"\` | yes | Start every new item at \`"wishlist"\` unless the user says otherwise. Use \`"idea"\` for something not yet committed to — its cost is automatically excluded from the roster's running total until it's promoted to \`"wishlist"\` or further |
 | cost | number | no | Approximate USD. Omit if genuinely unknown; use the midpoint if the plan gives a range |
 | quantity | number | no | Omit for single/uncountable items |
 | notes | string | no | |
@@ -111,10 +111,12 @@ steps in the app's UI.
 { "rosterItemId": "some-roster-item-id", "requiredStatus": "arrived" }
 \`\`\`
 
-\`requiredStatus\` uses the same five-value status enum as RosterItem.status
+\`requiredStatus\` uses the same six-value status enum as RosterItem.status
 above. Typically \`"arrived"\` — meaning "this step waits until that item is
 physically in hand." Statuses are ordered, so requiring \`"arrived"\` is also
-satisfied by \`"acclimating"\` or \`"established"\`.
+satisfied by \`"acclimating"\` or \`"established"\`. Requiring \`"idea"\` is a
+no-op — every status meets or exceeds it, so a link to \`"idea"\` never
+actually locks anything.
 
 ### ⚠️ Critical ordering rule
 
@@ -140,8 +142,10 @@ completed — phase by phase, task by task within each phase.
 - Custom fields should reflect what's actually worth tracking for this
   specific tank — not every tank needs the same fields.
 - If part of the plan is an open/undecided item (e.g. "still deciding on a
-  centerpiece fish"), include it as a roster item with no cost and a detail
-  note explaining it's undecided, rather than omitting it or guessing.
+  centerpiece fish"), include it as a roster item with \`status: "idea"\`
+  and a detail note explaining what's undecided — its cost won't count
+  toward the total while it stays at that status, so it's safe to include
+  even with a rough cost estimate attached.
 
 ## Full example
 

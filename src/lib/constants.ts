@@ -1,6 +1,7 @@
 import type { SourcingStatus, RosterItem } from '../types';
 
 export const STATUS_ORDER: SourcingStatus[] = [
+  'idea',
   'wishlist',
   'ordered',
   'arrived',
@@ -9,6 +10,7 @@ export const STATUS_ORDER: SourcingStatus[] = [
 ];
 
 export const STATUS_LABELS: Record<SourcingStatus, string> = {
+  idea: 'Idea',
   wishlist: 'Wishlist',
   ordered: 'Ordered',
   arrived: 'Arrived',
