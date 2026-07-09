@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../lib/DataContext';
+import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS } from '../lib/constants';
 import type { RosterItem, SourcingStatus } from '../types';
 
@@ -11,6 +12,7 @@ export default function Roster() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RosterItem['category'] | 'all'>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
+  const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
 
   if (!activeTank) return null;
 
@@ -167,11 +169,18 @@ export default function Roster() {
                   Edit
                 </button>
                 <button
-                  onClick={() => deleteRosterItem(item.id)}
-                  className="btn-icon danger"
-                  aria-label={`Remove ${item.name}`}
+                  onClick={() => handleDeleteClick(item.id, () => deleteRosterItem(item.id))}
+                  className={`btn-icon ${
+                    pendingDeleteId === item.id ? 'text-amber' : 'danger'
+                  }`}
+                  aria-label={
+                    pendingDeleteId === item.id
+                      ? `Click again to confirm removing ${item.name}`
+                      : `Remove ${item.name}`
+                  }
+                  title={pendingDeleteId === item.id ? 'Click again to confirm' : undefined}
                 >
-                  ✕
+                  {pendingDeleteId === item.id ? '✓' : '✕'}
                 </button>
               </div>
             </div>

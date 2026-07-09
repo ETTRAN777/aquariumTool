@@ -150,7 +150,12 @@ export default function Log() {
                       Edit
                     </button>
                     <button
-                      onClick={() => deleteLogEntry(entry.id)}
+                      onClick={() => {
+                        const confirmed = confirm(
+                          `Delete "${entry.title}" (${entry.weekLabel})? This can't be undone.`
+                        );
+                        if (confirmed) deleteLogEntry(entry.id);
+                      }}
                       className="btn-icon danger"
                     >
                       Delete entry

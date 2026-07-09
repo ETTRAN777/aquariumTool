@@ -3,7 +3,15 @@ import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
 import { importData, tankContentKey } from '../lib/storage';
-import type { Tank } from '../types';
+import TankQuestionnaire from '../components/TankQuestionnaire';
+import type { Tank, RecommendedRosterItem } from '../types';
+
+interface PendingTankDetails {
+  name: string;
+  sizeGallons: number;
+  dimensions?: string;
+  style?: string;
+}
 
 export default function CreateTank({ onDone }: { onDone?: () => void }) {
   const { data, createTank, updateTank } = useData();
@@ -12,6 +20,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
   const [sizeGallons, setSizeGallons] = useState('10');
   const [dimensions, setDimensions] = useState('');
   const [style, setStyle] = useState('');
+  const [pendingDetails, setPendingDetails] = useState<PendingTankDetails | null>(null);
 
   const [importedTanks, setImportedTanks] = useState<Tank[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -21,15 +30,31 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     if (t.suggestedStyle && !style) setStyle(t.suggestedStyle);
   }
 
+  function finishCreate(recommendedItems: RecommendedRosterItem[] = []) {
+    if (!selected || !pendingDetails) return;
+    const tank = buildTankFromTemplate(selected, pendingDetails, recommendedItems);
+    createTank(tank);
+    setPendingDetails(null);
+    onDone?.();
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !selected) return;
-    const tank = buildTankFromTemplate(selected, {
+    const details: PendingTankDetails = {
       name: name.trim(),
       sizeGallons: Number(sizeGallons) || 10,
       dimensions: dimensions.trim(),
       style: style.trim(),
-    });
+    };
+    // Templates with a questionnaire attached pause here instead of
+    // creating immediately — the tank gets built once the questionnaire
+    // finishes (or is skipped), with whatever roster items came out of it.
+    if (selected.questionnaire) {
+      setPendingDetails(details);
+      return;
+    }
+    const tank = buildTankFromTemplate(selected, details);
     createTank(tank);
     onDone?.();
   }
@@ -63,6 +88,26 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
   function replaceExisting(imported: Tank, existingId: string) {
     updateTank({ ...imported, id: existingId });
     onDone?.();
+  }
+
+  if (pendingDetails && selected?.questionnaire) {
+    return (
+      <div className="max-w-2xl mx-auto py-10 space-y-6">
+        <div className="text-center">
+          <p className="font-mono text-xs tracking-widest text-amber uppercase mb-2">
+            {selected.name} — a few quick questions
+          </p>
+          <h1 className="font-display text-3xl font-semibold">
+            Let's find the right starting roster for "{pendingDetails.name}"
+          </h1>
+        </div>
+        <TankQuestionnaire
+          root={selected.questionnaire}
+          onComplete={(items) => finishCreate(items)}
+          onSkip={() => finishCreate([])}
+        />
+      </div>
+    );
   }
 
   return (

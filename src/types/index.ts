@@ -74,6 +74,50 @@ export interface Tank {
   logs: LogEntry[];
 }
 
+// --- Recommended-roster questionnaire ---
+// A simple nested tree: every option on a Question either leads to another
+// Question or terminates in a QuestionResult (a curated pool of roster item
+// suggestions). No IDs/lookups needed since it's a strict tree, authored as
+// plain nested object literals.
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  emoji?: string;
+  next: QuestionNode;
+}
+
+export interface Question {
+  kind: 'question';
+  id: string;
+  prompt: string;
+  options: QuestionOption[];
+}
+
+export interface QuestionResult {
+  kind: 'result';
+  id: string;
+  summary: string;
+  items: RecommendedRosterItem[];
+}
+
+export type QuestionNode = Question | QuestionResult;
+
+// A roster item suggestion — same shape as RosterItem minus `id` (assigned
+// fresh when actually added), plus `defaultSelected` so a result screen can
+// pre-check the items that are almost always right for that path while
+// leaving edge-case add-ons unchecked by default.
+export interface RecommendedRosterItem {
+  name: string;
+  category: RosterItem['category'];
+  detail?: string;
+  source?: string;
+  status: SourcingStatus;
+  cost?: number;
+  quantity?: number;
+  defaultSelected: boolean;
+}
+
 export interface AppData {
   tanks: Tank[];
   activeTankId: string;

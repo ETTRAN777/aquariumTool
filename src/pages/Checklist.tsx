@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../lib/DataContext';
+import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { STATUS_ORDER, STATUS_LABELS, statusMeetsRequirement } from '../lib/constants';
 import type { ChecklistTask, RosterLink, SourcingStatus } from '../types';
 
@@ -14,6 +15,7 @@ export default function Checklist() {
   const [newRosterLinks, setNewRosterLinks] = useState<RosterLink[]>([]);
   const [showAddDeps, setShowAddDeps] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
 
   function rosterLinkSatisfied(link: RosterLink) {
     const item = roster.find((r) => r.id === link.rosterItemId);
@@ -249,10 +251,11 @@ export default function Checklist() {
                     Edit
                   </button>
                   <button
-                    onClick={() => removeTask(task.id)}
-                    className="btn-icon danger"
+                    onClick={() => handleDeleteClick(task.id, () => removeTask(task.id))}
+                    className={`btn-icon ${pendingDeleteId === task.id ? 'text-amber' : 'danger'}`}
+                    title={pendingDeleteId === task.id ? 'Click again to confirm' : undefined}
                   >
-                    Remove
+                    {pendingDeleteId === task.id ? '✓ Confirm' : 'Remove'}
                   </button>
                 </div>
               </div>
