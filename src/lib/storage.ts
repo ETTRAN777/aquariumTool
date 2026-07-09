@@ -61,6 +61,16 @@ function normalizeAppData(raw: any): AppData {
   };
 }
 
+// Compares two tanks by content only, ignoring the top-level `id` field
+// (which always differs between an imported copy and its original, since
+// import always assigns a fresh id). Nested roster/checklist/log ids are
+// NOT stripped — those stay stable across export/import round-trips for
+// the same tank, so an unmodified re-import produces an identical key here.
+export function tankContentKey(tank: Tank): string {
+  const { id, ...rest } = tank;
+  return JSON.stringify(rest);
+}
+
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -79,13 +89,24 @@ export function saveData(data: AppData): void {
   }
 }
 
-export function exportData(data: AppData): void {
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function exportData(data: AppData, activeTankName?: string): void {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const date = new Date().toISOString().split('T')[0];
+  // Named after whichever tank is active at export time, purely so
+  // exporting multiple tanks on the same day doesn't produce identically-
+  // named files — the export itself still always contains every tank.
+  const prefix = activeTankName ? `${slugify(activeTankName)}-` : '';
   a.href = url;
-  a.download = `tank-tracker-backup-${date}.json`;
+  a.download = `${prefix}tank-tracker-backup-${date}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

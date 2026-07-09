@@ -1,7 +1,6 @@
-import { useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
-import { exportData, importData } from '../lib/storage';
+import { exportData } from '../lib/storage';
 import Waterline from './Waterline';
 
 const navItems = [
@@ -15,22 +14,8 @@ const navItems = [
 const NEW_TANK_VALUE = '__new__';
 
 export default function Layout() {
-  const { activeTank, data, setData, setActiveTankId } = useData();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const { activeTank, data, setActiveTankId } = useData();
   const navigate = useNavigate();
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const imported = await importData(file);
-      setData(imported);
-      alert('Backup restored.');
-    } catch (err) {
-      alert('Could not read that file — is it a tank tracker backup?');
-    }
-    e.target.value = '';
-  }
 
   function handleTankSwitch(e: React.ChangeEvent<HTMLSelectElement>) {
     if (e.target.value === NEW_TANK_VALUE) {
@@ -101,26 +86,19 @@ export default function Layout() {
           </NavLink>
           <div className="flex items-center gap-1 ml-2 pl-2 border-l border-moss/30">
             <button
-              onClick={() => exportData(data)}
+              onClick={() => exportData(data, activeTank.name)}
               className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors"
               title="Download a JSON backup of all your data"
             >
               Export
             </button>
             <button
-              onClick={() => fileRef.current?.click()}
+              onClick={() => navigate('/new-tank')}
               className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors"
-              title="Restore from a JSON backup"
+              title="Bring in a tank from a backup file"
             >
               Import
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json"
-              className="hidden"
-              onChange={handleImport}
-            />
           </div>
         </nav>
       </header>

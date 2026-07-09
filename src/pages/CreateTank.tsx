@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
-import { importData } from '../lib/storage';
+import { importData, tankContentKey } from '../lib/storage';
 import type { Tank } from '../types';
 
 export default function CreateTank({ onDone }: { onDone?: () => void }) {
-  const { createTank } = useData();
+  const { data, createTank, updateTank } = useData();
   const [selected, setSelected] = useState<TankTemplate | null>(null);
   const [name, setName] = useState('');
   const [sizeGallons, setSizeGallons] = useState('10');
@@ -39,12 +39,12 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     if (!file) return;
     setImportError(null);
     try {
-      const data = await importData(file);
-      if (data.tanks.length === 0) {
+      const parsed = await importData(file);
+      if (parsed.tanks.length === 0) {
         setImportError('That file has no tanks in it.');
         setImportedTanks(null);
       } else {
-        setImportedTanks(data.tanks);
+        setImportedTanks(parsed.tanks);
       }
     } catch {
       setImportError('Could not read that file — is it a tank tracker backup?');
@@ -53,11 +53,15 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     e.target.value = '';
   }
 
-  function importTank(tank: Tank) {
-    // Fresh id — this is landing alongside whatever tanks already exist,
-    // never overwriting them, so it can't collide even if the same backup
-    // gets imported more than once.
+  // Fresh id — this is landing alongside whatever tanks already exist,
+  // never overwriting them by default.
+  function importAsNew(tank: Tank) {
     createTank({ ...tank, id: crypto.randomUUID() });
+    onDone?.();
+  }
+
+  function replaceExisting(imported: Tank, existingId: string) {
+    updateTank({ ...imported, id: existingId });
     onDone?.();
   }
 
@@ -167,8 +171,9 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         <div>
           <p className="field-label">Import a tank from a backup file</p>
           <p className="text-xs text-foam-dim">
-            Bring in a tank from another device or an older backup — it's added alongside
-            whatever tanks you already have, nothing gets overwritten.
+            Bring in a tank from another device or an older backup — new tanks land
+            alongside whatever you already have. If a tank matches one you've already got,
+            you'll be offered a choice instead of ending up with a duplicate.
           </p>
           <p className="text-xs text-foam-dim mt-2">
             Don't have a file yet? An AI assistant can generate one from your own build
@@ -187,26 +192,75 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         {importError && <p className="text-xs text-coral">{importError}</p>}
         {importedTanks && (
           <div className="space-y-2 pt-2 border-t border-moss/15">
-            {importedTanks.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between gap-3 bg-deepwater-2 rounded-md px-3 py-2"
-              >
-                <div>
-                  <p className="text-sm text-foam font-medium">{t.name}</p>
-                  <p className="text-xs text-foam-dim">
-                    {t.sizeGallons} gal · {t.roster.length} roster items ·{' '}
-                    {t.checklist.length} checklist steps · {t.logs.length} log entries
-                  </p>
+            {importedTanks.map((t) => {
+              const existingByName = data.tanks.find(
+                (existing) => existing.name.trim().toLowerCase() === t.name.trim().toLowerCase()
+              );
+              const isExactDuplicate =
+                existingByName && tankContentKey(existingByName) === tankContentKey(t);
+
+              return (
+                <div key={t.id} className="bg-deepwater-2 rounded-md px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-foam font-medium">{t.name}</p>
+                      <p className="text-xs text-foam-dim">
+                        {t.sizeGallons} gal · {t.roster.length} roster items ·{' '}
+                        {t.checklist.length} checklist steps · {t.logs.length} log entries
+                      </p>
+                    </div>
+
+                    {!existingByName && (
+                      <button
+                        onClick={() => importAsNew(t)}
+                        className="btn btn-secondary shrink-0"
+                      >
+                        Import this tank
+                      </button>
+                    )}
+
+                    {isExactDuplicate && (
+                      <button
+                        onClick={() => importAsNew(t)}
+                        className="btn btn-ghost shrink-0 text-xs"
+                        title="You already have an identical copy of this tank"
+                      >
+                        Import anyway (duplicate)
+                      </button>
+                    )}
+                  </div>
+
+                  {isExactDuplicate && (
+                    <p className="text-xs text-foam-dim/70 pl-0.5">
+                      ✓ Already have this exact tank — nothing new to bring in.
+                    </p>
+                  )}
+
+                  {existingByName && !isExactDuplicate && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-sand pl-0.5">
+                        You already have a tank named "{existingByName.name}" with different
+                        data — replace it, or keep both?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => replaceExisting(t, existingByName.id)}
+                          className="btn btn-secondary text-xs"
+                        >
+                          Replace existing
+                        </button>
+                        <button
+                          onClick={() => importAsNew(t)}
+                          className="btn btn-ghost text-xs"
+                        >
+                          Keep both
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => importTank(t)}
-                  className="btn btn-secondary shrink-0"
-                >
-                  Import this tank
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
