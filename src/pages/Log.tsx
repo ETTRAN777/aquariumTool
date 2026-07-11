@@ -2,13 +2,7 @@ import { useState } from 'react';
 import { useData } from '../lib/DataContext';
 import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue } from '../types';
 import { resizeImageToBase64 } from '../lib/storage';
-
-const MOOD_LABELS: Record<NonNullable<LogEntry['mood']>, string> = {
-  thriving: '🌿 Thriving',
-  stable: '💧 Stable',
-  watching: '👀 Watching',
-  concerned: '⚠️ Concerned',
-};
+import { MOOD_LABELS } from '../lib/constants';
 
 export default function Log() {
   const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry } = useData();

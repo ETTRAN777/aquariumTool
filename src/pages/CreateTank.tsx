@@ -85,6 +85,27 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     onDone?.();
   }
 
+  // Bulk version of importAsNew — only touches tanks with no name match in
+  // the existing collection, so anything that needs a replace/keep-both
+  // decision is left alone for the per-tank controls below. Fires onDone
+  // once at the end instead of after every tank, which was the actual bug:
+  // importAsNew closed the import view after the very first click, so a
+  // backup with several brand-new tanks required reopening "New tank" once
+  // per tank just to import the rest.
+  function importAllNew() {
+    if (!importedTanks) return;
+    const newOnes = importedTanks.filter(
+      (t) =>
+        !data.tanks.find(
+          (existing) => existing.name.trim().toLowerCase() === t.name.trim().toLowerCase()
+        )
+    );
+    for (const t of newOnes) {
+      createTank({ ...t, id: crypto.randomUUID() });
+    }
+    onDone?.();
+  }
+
   function replaceExisting(imported: Tank, existingId: string) {
     updateTank({ ...imported, id: existingId });
     onDone?.();
@@ -235,6 +256,25 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
           className="text-sm text-foam-dim file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-moss/30 file:bg-transparent file:text-foam-dim file:text-xs file:cursor-pointer hover:file:text-foam hover:file:border-moss/60 file:transition-colors"
         />
         {importError && <p className="text-xs text-coral">{importError}</p>}
+        {importedTanks && (() => {
+          const newOnes = importedTanks.filter(
+            (t) =>
+              !data.tanks.find(
+                (existing) => existing.name.trim().toLowerCase() === t.name.trim().toLowerCase()
+              )
+          );
+          return newOnes.length > 1 ? (
+            <div className="flex items-center justify-between gap-3 bg-deepwater-2 rounded-md px-3 py-2">
+              <p className="text-xs text-foam-dim">
+                {newOnes.length} tanks in this file are brand new — bring them all in at once,
+                or handle each one individually below.
+              </p>
+              <button onClick={importAllNew} className="btn btn-primary shrink-0 text-xs">
+                Import all {newOnes.length} new tanks
+              </button>
+            </div>
+          ) : null;
+        })()}
         {importedTanks && (
           <div className="space-y-2 pt-2 border-t border-moss/15">
             {importedTanks.map((t) => {
