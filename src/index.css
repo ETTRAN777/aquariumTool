@@ -98,6 +98,7 @@ body {
 
   .field::placeholder {
     color: color-mix(in srgb, var(--color-foam-dim) 55%, transparent);
+    -webkit-text-fill-color: color-mix(in srgb, var(--color-foam-dim) 55%, transparent);
   }
 
   .field:focus {

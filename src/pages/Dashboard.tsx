@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
+import { todayIso } from '../lib/date';
 
 export default function Dashboard() {
   const { activeTank } = useData();
   if (!activeTank) return null;
-  const { roster, checklist, logs, customFields } = activeTank;
+  const { roster, checklist, logs, customFields, schedule } = activeTank;
 
   const tasksDone = checklist.filter((c) => c.done).length;
   const progressPct = checklist.length
@@ -23,6 +24,9 @@ export default function Dashboard() {
   }, {});
 
   const latestLog = logs[0];
+
+  const today = todayIso();
+  const dueCount = schedule.filter((t) => !t.done && t.dueDate <= today).length;
 
   // Show whatever the tank's first numeric custom field is tracking — shrimp
   // count, fry count, fish count, whatever this tank was set up to watch.
@@ -75,6 +79,7 @@ export default function Dashboard() {
           link="/roster"
         />
         <StatCard label="Log entries" value={logs.length} link="/log" />
+        <StatCard label="Due / overdue" value={dueCount} link="/schedule" />
         {primaryField && (
           <StatCard
             label={primaryField.label}

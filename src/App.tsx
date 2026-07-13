@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Roster from './pages/Roster';
 import Checklist from './pages/Checklist';
 import Log from './pages/Log';
+import Schedule from './pages/Schedule';
 import Charts from './pages/Charts';
 import Settings from './pages/Settings';
 import CreateTank from './pages/CreateTank';
@@ -33,6 +34,7 @@ function AppShell() {
           <Route path="/roster" element={<Roster />} />
           <Route path="/checklist" element={<Checklist />} />
           <Route path="/log" element={<Log />} />
+          <Route path="/schedule" element={<Schedule />} />
           <Route path="/charts" element={<Charts />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/new-tank" element={<NewTankRoute />} />

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef } from '../types';
+import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef, ScheduleTask } from '../types';
 import { loadData, saveData } from './storage';
+import { todayIso, addDays, toIsoDate } from './date';
 
 interface DataContextValue {
   data: AppData;
@@ -18,6 +19,10 @@ interface DataContextValue {
   addLogEntry: (entry: LogEntry) => void;
   updateLogEntry: (entry: LogEntry) => void;
   deleteLogEntry: (id: string) => void;
+  addScheduleTask: (task: ScheduleTask) => void;
+  updateScheduleTask: (task: ScheduleTask) => void;
+  deleteScheduleTask: (id: string) => void;
+  completeScheduleTask: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -100,9 +105,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // completeScheduleTask links forward (task completed -> today's log, if it
+  // already exists). This covers the reverse order: log written AFTER a
+  // task was already completed that same day. Any schedule task whose
+  // lastCompletedDate matches this entry's calendar day, and isn't already
+  // linked to some other log entry, gets attached here too — so linking
+  // works regardless of which happens first.
   function addLogEntry(entry: LogEntry) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, logs: [entry, ...activeTank.logs] });
+
+    const entryDay = toIsoDate(new Date(entry.date));
+    const alreadyLinkedIds = new Set(
+      activeTank.logs.flatMap((l) => l.completedScheduleTaskIds ?? [])
+    );
+    const matchingTaskIds = activeTank.schedule
+      .filter((t) => t.lastCompletedDate === entryDay && !alreadyLinkedIds.has(t.id))
+      .map((t) => t.id);
+
+    const finalEntry =
+      matchingTaskIds.length > 0
+        ? {
+            ...entry,
+            completedScheduleTaskIds: [...(entry.completedScheduleTaskIds ?? []), ...matchingTaskIds],
+          }
+        : entry;
+
+    updateTank({ ...activeTank, logs: [finalEntry, ...activeTank.logs] });
   }
 
   function updateLogEntry(entry: LogEntry) {
@@ -116,6 +144,86 @@ export function DataProvider({ children }: { children: ReactNode }) {
   function deleteLogEntry(id: string) {
     if (!activeTank) return;
     updateTank({ ...activeTank, logs: activeTank.logs.filter((l) => l.id !== id) });
+  }
+
+  function addScheduleTask(task: ScheduleTask) {
+    if (!activeTank) return;
+    updateTank({ ...activeTank, schedule: [...activeTank.schedule, task] });
+  }
+
+  function updateScheduleTask(task: ScheduleTask) {
+    if (!activeTank) return;
+    updateTank({
+      ...activeTank,
+      schedule: activeTank.schedule.map((t) => (t.id === task.id ? task : t)),
+    });
+  }
+
+  function deleteScheduleTask(id: string) {
+    if (!activeTank) return;
+    updateTank({ ...activeTank, schedule: activeTank.schedule.filter((t) => t.id !== id) });
+  }
+
+  // Marking a task done: recurring tasks roll dueDate forward by
+  // recurrenceDays — critically, stepping forward from the task's OWN
+  // current dueDate each time, not from "today". Advancing from today was
+  // the original approach, but it meant completing the same task twice on
+  // the same real-world day always recomputed the identical target date —
+  // so a second completion looked like it did nothing, and the task
+  // appeared permanently stuck once its due date happened to land on
+  // today. Stepping from the task's own dueDate instead guarantees every
+  // completion moves it forward, and the catch-up loop below still lands
+  // on the next actually-upcoming occurrence if it had fallen badly
+  // overdue, rather than requiring one click per missed interval. If the
+  // task has an optional endDate and the next occurrence would land past
+  // it, the series retires (done: true) instead of continuing forever.
+  // One-off tasks just get marked done. Either way, if — and only if — a
+  // log entry already exists for today, this task's id is attached to it
+  // so the log shows what maintenance happened that day. No matching log
+  // entry means no log entry gets created; the schedule update still
+  // happens on its own.
+  function completeScheduleTask(id: string) {
+    if (!activeTank) return;
+    const task = activeTank.schedule.find((t) => t.id === id);
+    if (!task) return;
+
+    const today = todayIso();
+
+    const schedule = activeTank.schedule.map((t) => {
+      if (t.id !== id) return t;
+      if (t.recurrenceDays) {
+        let next = t.dueDate;
+        do {
+          next = addDays(next, t.recurrenceDays);
+        } while (next < today);
+        // Rolling forward would push past the series' own end date — treat
+        // this completion as the last one instead of producing a dueDate
+        // beyond the boundary the user set.
+        if (t.endDate && next > t.endDate) {
+          return { ...t, done: true, lastCompletedDate: today };
+        }
+        return { ...t, dueDate: next, lastCompletedDate: today };
+      }
+      return { ...t, done: true, lastCompletedDate: today };
+    });
+
+    // l.date is a full timestamp (new Date().toISOString()), so it's
+    // converted to its own local calendar day rather than sliced as a UTC
+    // string — otherwise a log made late in the evening could compare as
+    // "yesterday" against today's local date and silently fail to link.
+    const matchingLog = activeTank.logs.find((l) => toIsoDate(new Date(l.date)) === today);
+    const logs = matchingLog
+      ? activeTank.logs.map((l) =>
+          l.id === matchingLog.id
+            ? {
+                ...l,
+                completedScheduleTaskIds: [...(l.completedScheduleTaskIds ?? []), id],
+              }
+            : l
+        )
+      : activeTank.logs;
+
+    updateTank({ ...activeTank, schedule, logs });
   }
 
   return (
@@ -136,6 +244,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addLogEntry,
         updateLogEntry,
         deleteLogEntry,
+        addScheduleTask,
+        updateScheduleTask,
+        deleteScheduleTask,
+        completeScheduleTask,
       }}
     >
       {children}

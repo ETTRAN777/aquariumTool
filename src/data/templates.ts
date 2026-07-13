@@ -1,11 +1,19 @@
-import type { CustomFieldDef, ChecklistTask, Tank, Question, QuestionResult, RecommendedRosterItem, RosterItem } from '../types';
+import type {
+  CustomFieldDef,
+  ChecklistTask,
+  Tank,
+  Question,
+  QuestionNode,
+  QuestionResult,
+  RecommendedRosterItem,
+  RosterItem,
+} from '../types';
 import { PRESET_FIELDS } from './presetFields';
 
 export interface TankTemplate {
   id: string;
   name: string;
   description: string;
-  suggestedStyle: string;
   customFields: Omit<CustomFieldDef, 'id'>[];
   checklist: Omit<ChecklistTask, 'id' | 'done'>[];
   questionnaire?: Question;
@@ -22,19 +30,108 @@ function preset(label: string): Omit<CustomFieldDef, 'id'> {
   return { label: found.label, type: found.type };
 }
 
-// DRAFT — pilot content for co-review, not final. The Red Cherry and Yellow
-// Goldenback Neocaridina branches are grounded in the user's own real build
-// plans from earlier (Shrimp Tank: Manzanita, Maui Moon sand, crushed coral
-// in the filter media bag; Main Tank: Yellow Goldenback sourcing/pricing) —
-// higher confidence. Everything marked "fabricated" below is a placeholder
-// guess, not researched — expect to replace it.
-//
-// Design note: color is asked first purely as an easy warm-up question, not
-// because it determines genus — Neocaridina vs Caridina is a hardiness/
-// care-commitment distinction (Neocaridina more forgiving, Caridina more
-// particular about water chemistry), so a separate question asks about
-// desired commitment level and THAT determines which genus gets suggested.
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
 
+// =========================================================================
+// SUBSTRATE — a real, generalized either/or, not a Walstad-only default.
+// Every questionnaire below asks this first, before any livestock question,
+// since it's the one structural choice that affects the whole build
+// regardless of what ends up living in the tank. "Active" covers BOTH a
+// capped, dirted (Walstad-style) setup AND a commercial aquasoil — the
+// item's own detail explains that trade-off rather than assuming everyone
+// wants a dirted tank specifically. Source-checked against current
+// substrate-comparison guidance (inert+root-tabs is the commonly
+// recommended beginner default; dirted/aquasoil are both real alternatives
+// with their own trade-offs, not the only "correct" planted-tank approach).
+// =========================================================================
+
+export type SubstrateChoice = 'active' | 'inert';
+
+function substrateItems(choice: SubstrateChoice): RecommendedRosterItem[] {
+  if (choice === 'active') {
+    return [
+      {
+        name: 'Nutrient-Rich Substrate (dirted or aquasoil)',
+        category: 'substrate',
+        detail:
+          'Either capped organic potting soil (Walstad-style — cheaper, messier, more prone to ammonia spikes/cloudiness if disturbed) or a commercial aquasoil like Fluval Stratum or ADA Amazonia (pricier, cleaner, no capping needed, depletes over 1-2 years). Both feed root-growing plants directly without regular dosing.',
+        cost: 18,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+    ];
+  }
+  return [
+    {
+      name: 'Inert Sand or Fine Gravel',
+      category: 'substrate',
+      detail:
+        "Won't alter water chemistry and never needs replacing — generally the easiest substrate to manage, especially for a first tank.",
+      cost: 15,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+    {
+      name: 'Root Tabs',
+      category: 'equipment',
+      detail: 'Only needed under root-feeding plants (swords, crypts) — inert substrate has no nutrients of its own.',
+      cost: 6,
+      status: 'wishlist',
+      defaultSelected: false,
+    },
+  ];
+}
+
+function substrateQuestion(buildNext: (choice: SubstrateChoice) => QuestionNode): Question {
+  return {
+    kind: 'question',
+    id: 'q-substrate',
+    prompt: 'How do you want to feed root-growing plants?',
+    options: [
+      {
+        id: 'active',
+        label: 'Nutrient-rich substrate (dirted soil or aquasoil) — feeds plants directly',
+        emoji: '🌱',
+        next: buildNext('active'),
+      },
+      {
+        id: 'inert',
+        label: 'Inert sand/gravel + root tabs as needed — simpler to manage',
+        emoji: '🪨',
+        next: buildNext('inert'),
+      },
+    ],
+  };
+}
+
+// =========================================================================
+// SIZE-AWARE STOCKING HELPERS
+// Grounded in commonly-cited stocking guidance rather than a single fixed
+// number regardless of tank size:
+// - Neocaridina: conservative sources suggest starting around 1/gallon and
+//   letting a colony grow into the widely-cited 5-10/gallon long-term
+//   carrying capacity, rather than stocking at full density on day one.
+// - Caridina (CRS, Blue Bolt, etc.): kept more conservatively — softer,
+//   more particular water, slower to recover from a bad batch.
+// =========================================================================
+
+function neoStarterQty(sizeGallons: number): number {
+  return clamp(sizeGallons * 1, 8, 40);
+}
+
+function caridinaStarterQty(sizeGallons: number): number {
+  return clamp(sizeGallons * 0.6, 6, 25);
+}
+
+// --- Shared commitment-level question, used inside the shrimp tree ---
+// Color is asked first purely as an easy warm-up question, not because it
+// determines genus — Neocaridina vs Caridina is a hardiness/care-commitment
+// distinction (Neocaridina more forgiving and tolerant of a wider range of
+// tap water, Caridina more particular about soft/stable water), so a
+// separate question asks about desired commitment level and THAT
+// determines which genus gets suggested.
 function commitmentQuestion(
   id: string,
   simpleResult: QuestionResult,
@@ -47,7 +144,7 @@ function commitmentQuestion(
     options: [
       {
         id: 'simple',
-        label: 'Keep it simple — hardier and more forgiving',
+        label: 'Keep it simple — hardier and more forgiving of tap water',
         emoji: '🌱',
         next: simpleResult,
       },
@@ -61,366 +158,722 @@ function commitmentQuestion(
   };
 }
 
-// --- Red ---
-const redNeoResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-red-neo',
-  summary: 'Red Cherry Neocaridina Starter',
-  items: [
-    { name: 'Neocaridina davidi — Red Cherry (S/SS Grade)', category: 'livestock', quantity: 10, cost: 30, status: 'wishlist', defaultSelected: true },
-    { name: 'Manzanita Wood', category: 'hardscape', detail: 'Minimal impact on water chemistry, no boiling needed — just a longer soak or temporary weighting', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood") — hollow, biodegradable, builds a biofilm layer shrimp graze on', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties, shrimp graze the biofilm that grows on them as they break down', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral + Media Bag', category: 'hardscape', detail: 'Buffering — goes in the filter, not the substrate', cost: 12, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 8, status: 'wishlist', defaultSelected: true },
-    { name: 'Dark Fine-Grain Sand (e.g. Maui Moon)', category: 'substrate', detail: 'Dark substrate enhances Neocaridina pigmentation', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Floating Plants', category: 'plant', detail: 'Best added a few weeks in, once the tank has settled', status: 'wishlist', defaultSelected: false },
-  ],
-};
-
-const redCaridinaResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-red-caridina',
-  summary: 'Crystal Red Shrimp (CRS) Starter',
-  items: [
-    { name: 'Caridina cantonensis — Crystal Red Shrimp', category: 'livestock', detail: 'Grade and exact sourcing still worth researching, but CRS itself is a well-established, widely available variety', quantity: 10, status: 'wishlist', defaultSelected: true },
-    { name: 'Mopani Wood', category: 'hardscape', detail: 'Releases more tannins than Manzanita, softening and acidifying the water — a better match for Caridina\'s soft/acidic preference. Needs an initial boil/soak', cost: 18, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood") — hollow, biodegradable, builds a biofilm layer shrimp graze on', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties — doubles down on the soft/acidic lean Caridina want', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Active Soil Substrate', category: 'substrate', detail: 'Buffers toward the soft/acidic water CRS want — no crushed coral here, that would push the opposite direction', status: 'wishlist', defaultSelected: true },
-    { name: 'RO/RODI Water System', category: 'equipment', detail: 'CRS are typically far more sensitive to tap water parameters than Neocaridina', status: 'idea', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
-  ],
-};
-
-// --- Yellow ---
-const yellowNeoResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-yellow-neo',
-  summary: 'Yellow Goldenback Neocaridina Starter',
-  items: [
-    { name: 'Neocaridina davidi — Yellow Goldenback (S Grade)', category: 'livestock', quantity: 10, cost: 35, status: 'wishlist', defaultSelected: true },
-    { name: 'Manzanita Wood', category: 'hardscape', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood") — hollow, biodegradable, builds a biofilm layer shrimp graze on', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties, shrimp graze the biofilm that grows on them as they break down', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral + Media Bag', category: 'hardscape', detail: 'Buffering — goes in the filter, not the substrate', cost: 12, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 8, status: 'wishlist', defaultSelected: true },
-    { name: 'Dark Fine-Grain Sand (e.g. Maui Moon)', category: 'substrate', detail: 'Dark substrate enhances Neocaridina pigmentation', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
-  ],
-};
-
-const yellowCaridinaResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-yellow-caridina',
-  summary: 'Yellow Caridina Starter (species name still unconfirmed — please verify)',
-  items: [
-    { name: 'Caridina — yellow variety (species TBD)', category: 'livestock', detail: 'STILL UNCONFIRMED — not confident a well-established "yellow Caridina" variety name exists the way CRS/Blue Bolt do, verify before treating this as a real recommendation', quantity: 10, status: 'idea', defaultSelected: true },
-    { name: 'Mopani Wood', category: 'hardscape', detail: 'Releases more tannins than Manzanita, softening and acidifying the water — a better match for Caridina\'s soft/acidic preference. Needs an initial boil/soak', cost: 18, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood")', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Active Soil Substrate', category: 'substrate', detail: 'Buffers toward soft/acidic water', status: 'wishlist', defaultSelected: true },
-    { name: 'RO/RODI Water System', category: 'equipment', status: 'idea', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-// --- Blue ---
-const blueNeoResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-blue-neo',
-  summary: 'Blue Dream Neocaridina Starter (draft — please verify)',
-  items: [
-    { name: 'Neocaridina davidi — Blue Dream', category: 'livestock', quantity: 10, cost: 35, status: 'wishlist', defaultSelected: true },
-    { name: 'Manzanita Wood', category: 'hardscape', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood")', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral + Media Bag', category: 'hardscape', cost: 12, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 8, status: 'wishlist', defaultSelected: true },
-    { name: 'Dark Fine-Grain Sand (e.g. Maui Moon)', category: 'substrate', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-const blueCaridinaResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-blue-caridina',
-  summary: 'Blue Bolt Shrimp Starter',
-  items: [
-    { name: 'Caridina cantonensis — Blue Bolt', category: 'livestock', detail: 'Grade and exact sourcing still worth researching, but Blue Bolt itself is a well-established, widely available variety', quantity: 10, status: 'wishlist', defaultSelected: true },
-    { name: 'Mopani Wood', category: 'hardscape', detail: 'Releases more tannins than Manzanita, softening and acidifying the water — a better match for Caridina\'s soft/acidic preference. Needs an initial boil/soak', cost: 18, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood")', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Active Soil Substrate', category: 'substrate', detail: 'Buffers toward soft/acidic water — no crushed coral here', status: 'wishlist', defaultSelected: true },
-    { name: 'RO/RODI Water System', category: 'equipment', status: 'idea', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-// --- Not sure ---
-const notSureNeoResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-notsure-neo',
-  summary: 'Mixed-Grade Neocaridina Starter (draft — please verify)',
-  items: [
-    { name: 'Neocaridina davidi — mixed color pack', category: 'livestock', quantity: 10, cost: 25, status: 'wishlist', defaultSelected: true },
-    { name: 'Manzanita Wood', category: 'hardscape', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood")', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral + Media Bag', category: 'hardscape', cost: 12, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 8, status: 'wishlist', defaultSelected: true },
-    { name: 'Dark Fine-Grain Sand (e.g. Maui Moon)', category: 'substrate', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-const notSureCaridinaResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-notsure-caridina',
-  summary: 'Mixed Caridina Starter (draft — species pack still needs research)',
-  items: [
-    { name: 'Caridina — mixed variety pack (TBD)', category: 'livestock', detail: 'Which varieties to bundle here still needs research', quantity: 10, status: 'idea', defaultSelected: true },
-    { name: 'Mopani Wood', category: 'hardscape', detail: 'Releases more tannins than Manzanita, softening and acidifying the water — a better match for Caridina\'s soft/acidic preference. Needs an initial boil/soak', cost: 18, status: 'wishlist', defaultSelected: true },
-    { name: 'Cholla Wood', category: 'hardscape', detail: 'A shrimp-keeping staple ("shrimpwood")', cost: 7, status: 'wishlist', defaultSelected: true },
-    { name: 'Indian Almond Leaves (Catappa)', category: 'hardscape', detail: 'Releases tannins, mild antibacterial properties', cost: 6, status: 'wishlist', defaultSelected: true },
-    { name: 'Active Soil Substrate', category: 'substrate', detail: 'Buffers toward soft/acidic water', status: 'wishlist', defaultSelected: true },
-    { name: 'RO/RODI Water System', category: 'equipment', status: 'idea', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-const otherInvertResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-other-invert',
-  summary: 'Other Invert Starter (fabricated — needs species-specific detail)',
-  items: [
-    { name: 'Invert species (TBD)', category: 'livestock', status: 'idea', defaultSelected: true, detail: 'FABRICATED PLACEHOLDER — crayfish/snail-specific needs vary a lot by species' },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 8, status: 'wishlist', defaultSelected: true },
-  ],
-};
-
-const shrimpQuestionnaire: Question = {
-  kind: 'question',
-  id: 'q-focus',
-  prompt: "What's the main focus of this tank?",
-  options: [
+function shrimpHardscape(): RecommendedRosterItem[] {
+  return [
     {
-      id: 'shrimp',
-      label: 'Shrimp',
-      emoji: '🦐',
-      next: {
-        kind: 'question',
-        id: 'q-color',
-        prompt: 'What look are you going for? (Just a starting point — this comes before genus, not the other way around)',
-        options: [
-          { id: 'red', label: 'Red', emoji: '🔴', next: commitmentQuestion('q-commit-red', redNeoResult, redCaridinaResult) },
-          { id: 'yellow', label: 'Yellow', emoji: '🟡', next: commitmentQuestion('q-commit-yellow', yellowNeoResult, yellowCaridinaResult) },
-          { id: 'blue', label: 'Blue', emoji: '🔵', next: commitmentQuestion('q-commit-blue', blueNeoResult, blueCaridinaResult) },
-          { id: 'not-sure', label: "Not sure yet, show me common options", emoji: '🤔', next: commitmentQuestion('q-commit-notsure', notSureNeoResult, notSureCaridinaResult) },
-        ],
-      },
+      name: 'Driftwood (Manzanita or similar)',
+      category: 'hardscape',
+      detail: 'Minimal impact on water chemistry — just needs weighting or a long soak, no boiling required',
+      cost: 20,
+      status: 'wishlist',
+      defaultSelected: true,
     },
     {
-      id: 'other-invert',
-      label: 'Other invert (crayfish, snails, etc.)',
-      emoji: '🦞',
-      next: otherInvertResult,
+      name: 'Cholla Wood',
+      category: 'hardscape',
+      detail: 'Hollow, biodegradable "shrimpwood" — builds a biofilm layer shrimp graze on',
+      cost: 7,
+      status: 'wishlist',
+      defaultSelected: true,
     },
-  ],
-};
-
-// --- Livebearers & Fry (Guppy-focused — research-grounded) ---
-const guppyMixedResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-guppy-mixed',
-  summary: 'Mixed-Gender Guppy Starter (breeding-friendly)',
-  items: [
-    { name: 'Guppies — mixed (6 female, 3 male)', category: 'livestock', detail: '2-3 females per male keeps breeding pressure spread across the group rather than harassing one female', quantity: 9, cost: 30, status: 'wishlist', defaultSelected: true },
-    { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 76-78°F', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter', category: 'equipment', detail: 'Preferred over HOB — gentle flow keeps fry from getting pulled in', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Coarse Sand or Fine Gravel', category: 'substrate', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral', category: 'hardscape', detail: 'Guppies want slightly hard water (pH 7.0-8.5) — only add this if your tap water is on the soft side', cost: 10, status: 'wishlist', defaultSelected: false },
-    { name: 'Floating Plants', category: 'plant', detail: 'Essential for fry survival and shade — don\'t skip this if you\'re keeping mixed genders', status: 'wishlist', defaultSelected: true },
-    { name: 'Guppy Grass', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Anubias', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
-  ],
-};
-
-const guppyAllMaleResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-guppy-all-male',
-  summary: 'All-Male Guppy Starter (no breeding)',
-  items: [
-    { name: 'Guppies — all male', category: 'livestock', detail: 'Prevents overbreeding entirely — no fry management needed', quantity: 6, cost: 25, status: 'wishlist', defaultSelected: true },
-    { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 76-78°F', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
-    { name: 'Coarse Sand or Fine Gravel', category: 'substrate', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral', category: 'hardscape', detail: 'Guppies want slightly hard water (pH 7.0-8.5) — only add this if your tap water is on the soft side', cost: 10, status: 'wishlist', defaultSelected: false },
-    { name: 'Guppy Grass', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Anubias', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Floating Plants', category: 'plant', detail: 'Not essential without fry, but still good for shade and cover', status: 'wishlist', defaultSelected: false },
-  ],
-};
-
-const molliesResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-mollies',
-  summary: 'Molly Starter (fabricated — needs research)',
-  items: [
-    { name: 'Mollies (variety TBD)', category: 'livestock', detail: 'FABRICATED PLACEHOLDER — not researched yet, mollies generally want harder/more alkaline water than guppies and some strains tolerate brackish, verify before treating this as real', quantity: 6, status: 'idea', defaultSelected: true },
-  ],
-};
-
-const platiesResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-platies',
-  summary: 'Platy Starter (fabricated — needs research)',
-  items: [
-    { name: 'Platies (variety TBD)', category: 'livestock', detail: 'FABRICATED PLACEHOLDER — not researched yet', quantity: 6, status: 'idea', defaultSelected: true },
-  ],
-};
-
-const livebearersQuestionnaire: Question = {
-  kind: 'question',
-  id: 'q-livebearer-species',
-  prompt: 'Which livebearer are you focusing on?',
-  options: [
     {
-      id: 'guppies',
-      label: 'Guppies',
-      emoji: '🐟',
-      next: {
-        kind: 'question',
-        id: 'q-guppy-breeding',
-        prompt: 'Do you want to breed guppies, or keep it low-maintenance?',
-        options: [
-          { id: 'mixed', label: "I don't mind fry — mixed gender", emoji: '🍼', next: guppyMixedResult },
-          { id: 'all-male', label: 'Keep it simple — all-male, no breeding', emoji: '🚫', next: guppyAllMaleResult },
-        ],
-      },
+      name: 'Indian Almond Leaves (Catappa)',
+      category: 'hardscape',
+      detail: 'Releases tannins, mild antibacterial properties — shrimp graze the biofilm that grows on them as they break down',
+      cost: 6,
+      status: 'wishlist',
+      defaultSelected: true,
     },
-    { id: 'mollies', label: 'Mollies', emoji: '🐠', next: molliesResult },
-    { id: 'platies', label: 'Platies', emoji: '🐠', next: platiesResult },
-  ],
-};
+    {
+      name: 'Sponge Filter + Air Pump',
+      category: 'equipment',
+      cost: 16,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+  ];
+}
 
-// --- Community Fish ---
-// The shrimp-inclusive branch reuses the user's own real Main Tank build
-// (Manzanita, Dragon stone, dark sand, crushed coral in the filter, Yellow
-// Goldenback Neocaridina + Pygmy Corydoras + Chili Rasboras) — high
-// confidence, already validated. The classic branch is grounded in fresh
-// research (Honey Gourami centerpiece, Ember Tetra/Harlequin Rasbora
-// school, Pygmy Corydoras cleanup crew).
-const shrimpInclusiveCommunityResult: QuestionResult = {
-  kind: 'result',
-  id: 'r-community-shrimp',
-  summary: 'Peaceful Community + Shrimp (aquascape-style)',
-  items: [
-    { name: 'Neocaridina davidi — Yellow Goldenback', category: 'livestock', quantity: 15, cost: 45, status: 'wishlist', defaultSelected: true },
-    { name: 'Pygmy Corydoras', category: 'livestock', quantity: 7, cost: 42, status: 'wishlist', defaultSelected: true },
-    { name: 'Chili Rasboras', category: 'livestock', detail: 'Confirm tank-bred, not wild-caught', quantity: 10, cost: 40, status: 'wishlist', defaultSelected: true },
-    { name: 'Standard Nerite Snails', category: 'livestock', quantity: 5, cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Ramshorn Snails', category: 'livestock', quantity: 2, cost: 4, status: 'wishlist', defaultSelected: false },
-    { name: 'Manzanita Wood', category: 'hardscape', cost: 30, status: 'wishlist', defaultSelected: true },
-    { name: 'Dragon Stone', category: 'hardscape', cost: 25, status: 'wishlist', defaultSelected: true },
-    { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 20, status: 'wishlist', defaultSelected: true },
-    { name: 'Crushed Coral + Media Bag', category: 'hardscape', detail: 'Buffering — goes in the filter, not the substrate', cost: 12, status: 'wishlist', defaultSelected: true },
-    { name: 'Organic Potting Soil', category: 'substrate', cost: 15, status: 'wishlist', defaultSelected: true },
-    { name: 'Dark Fine-Grain Sand (e.g. Maui Moon)', category: 'substrate', cost: 35, status: 'wishlist', defaultSelected: true },
-    { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: true },
-    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Vallisneria', category: 'plant', status: 'wishlist', defaultSelected: false },
-    { name: 'Floating Plants', category: 'plant', status: 'wishlist', defaultSelected: false },
-  ],
-};
+function tannicHardscapeForCaridina(): RecommendedRosterItem[] {
+  return [
+    {
+      name: 'Mopani Wood',
+      category: 'hardscape',
+      detail:
+        "Releases more tannins than Manzanita, softening and acidifying the water — a better match for Caridina's soft/acidic preference. Needs an initial boil/soak",
+      cost: 18,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+    {
+      name: 'Cholla Wood',
+      category: 'hardscape',
+      detail: 'Hollow, biodegradable "shrimpwood" — builds a biofilm layer shrimp graze on',
+      cost: 7,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+    {
+      name: 'Indian Almond Leaves (Catappa)',
+      category: 'hardscape',
+      detail: 'Releases tannins, mild antibacterial properties — doubles down on the soft/acidic lean Caridina want',
+      cost: 6,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+    {
+      name: 'Sponge Filter + Air Pump',
+      category: 'equipment',
+      cost: 16,
+      status: 'wishlist',
+      defaultSelected: true,
+    },
+  ];
+}
 
-function classicCommunityResult(schoolName: string, schoolDetail: string): QuestionResult {
+function shrimpPlants(): RecommendedRosterItem[] {
+  return [
+    { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
+    { name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: false },
+    { name: 'Hornwort', category: 'plant', status: 'wishlist', defaultSelected: false },
+    {
+      name: 'Floating Plants',
+      category: 'plant',
+      detail: 'Best added a few weeks in, once the tank has settled',
+      status: 'wishlist',
+      defaultSelected: false,
+    },
+  ];
+}
+
+// --- Neocaridina results (hardy, tolerant of a wide pH range) ---
+function redNeoResult(substrate: SubstrateChoice): QuestionResult {
   return {
     kind: 'result',
-    id: `r-community-classic-${schoolName.toLowerCase().replace(/\s+/g, '-')}`,
-    summary: `Classic Community: Honey Gourami + ${schoolName}`,
-    items: [
-      { name: 'Honey Gourami', category: 'livestock', detail: 'Centerpiece — peaceful, top-to-middle water column', quantity: 1, cost: 12, status: 'wishlist', defaultSelected: true },
-      { name: schoolName, category: 'livestock', detail: schoolDetail, quantity: 9, cost: 35, status: 'wishlist', defaultSelected: true },
-      { name: 'Pygmy Corydoras', category: 'livestock', detail: 'Bottom cleanup crew — Otocinclus is a reasonable swap if you want more algae focus and less social-grouping need', quantity: 7, cost: 42, status: 'wishlist', defaultSelected: true },
-      { name: 'Hang-On-Back Filter (e.g. AquaClear 30/50)', category: 'equipment', detail: 'Dial the flow down — full HOB current can be too strong for small schooling fish', cost: 35, status: 'wishlist', defaultSelected: true },
-      { name: 'Driftwood', category: 'hardscape', detail: 'Java Fern and Anubias attach to this rather than planting in substrate', cost: 20, status: 'wishlist', defaultSelected: true },
-      { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: true },
-      { name: 'Anubias', category: 'plant', status: 'wishlist', defaultSelected: true },
-      { name: 'Floating Plants', category: 'plant', detail: 'Shade and cover at the surface', status: 'wishlist', defaultSelected: false },
+    id: `r-red-neo-${substrate}`,
+    summary: 'Red Cherry Neocaridina Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Neocaridina davidi — Red Cherry (S/SS Grade)',
+        category: 'livestock',
+        quantity: neoStarterQty(sizeGallons),
+        cost: 30,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...shrimpHardscape(),
+      {
+        name: 'Crushed Coral + Media Bag',
+        category: 'hardscape',
+        detail: 'Optional buffering, goes in the filter not the substrate — only worth adding if your tap water runs naturally soft',
+        cost: 12,
+        status: 'wishlist',
+        defaultSelected: false,
+      },
+      ...substrateItems(substrate),
+      ...shrimpPlants(),
     ],
   };
 }
 
-const communityQuestionnaire: Question = {
+function redCaridinaResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-red-caridina-${substrate}`,
+    summary: 'Crystal Red Shrimp (CRS) Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Caridina cantonensis — Crystal Red Shrimp',
+        category: 'livestock',
+        detail: 'Grade and exact sourcing still worth researching, but CRS itself is a well-established, widely available variety',
+        quantity: caridinaStarterQty(sizeGallons),
+        cost: 3.5,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...tannicHardscapeForCaridina(),
+      ...substrateItems(substrate),
+      {
+        name: 'RO/RODI Water System',
+        category: 'equipment',
+        detail: "CRS are typically far more sensitive to tap water parameters than Neocaridina",
+        status: 'idea',
+        defaultSelected: true,
+      },
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+// --- Yellow ---
+function yellowNeoResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-yellow-neo-${substrate}`,
+    summary: 'Yellow Goldenback Neocaridina Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Neocaridina davidi — Yellow Goldenback (S Grade)',
+        category: 'livestock',
+        quantity: neoStarterQty(sizeGallons),
+        cost: 35,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...shrimpHardscape(),
+      {
+        name: 'Crushed Coral + Media Bag',
+        category: 'hardscape',
+        detail: 'Optional buffering, goes in the filter not the substrate — only worth adding if your tap water runs naturally soft',
+        cost: 12,
+        status: 'wishlist',
+        defaultSelected: false,
+      },
+      ...substrateItems(substrate),
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+function yellowCaridinaResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-yellow-caridina-${substrate}`,
+    summary: 'Yellow King Kong Shrimp Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Caridina cantonensis — Yellow King Kong (Taiwan Bee lineage)',
+        category: 'livestock',
+        detail:
+          'A real, established Caridina color line (same Taiwan Bee lineage as King Kong/Panda varieties) — pricier and more particular about water stability than CRS, worth confirming current availability with your seller',
+        quantity: caridinaStarterQty(sizeGallons),
+        cost: 6,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...tannicHardscapeForCaridina(),
+      ...substrateItems(substrate),
+      {
+        name: 'RO/RODI Water System',
+        category: 'equipment',
+        detail: 'Taiwan Bee lines are typically even more sensitive to tap water swings than CRS',
+        status: 'idea',
+        defaultSelected: true,
+      },
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+// --- Blue ---
+function blueNeoResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-blue-neo-${substrate}`,
+    summary: 'Blue Dream Neocaridina Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Neocaridina davidi — Blue Dream',
+        category: 'livestock',
+        quantity: neoStarterQty(sizeGallons),
+        cost: 35,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...shrimpHardscape(),
+      {
+        name: 'Crushed Coral + Media Bag',
+        category: 'hardscape',
+        detail: 'Optional buffering, goes in the filter not the substrate — only worth adding if your tap water runs naturally soft',
+        cost: 12,
+        status: 'wishlist',
+        defaultSelected: false,
+      },
+      ...substrateItems(substrate),
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+function blueCaridinaResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-blue-caridina-${substrate}`,
+    summary: 'Blue Bolt Shrimp Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Caridina cantonensis — Blue Bolt',
+        category: 'livestock',
+        detail: 'Grade and exact sourcing still worth researching, but Blue Bolt itself is a well-established, widely available Taiwan Bee variety',
+        quantity: caridinaStarterQty(sizeGallons),
+        cost: 6,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...tannicHardscapeForCaridina(),
+      ...substrateItems(substrate),
+      {
+        name: 'RO/RODI Water System',
+        category: 'equipment',
+        status: 'idea',
+        defaultSelected: true,
+      },
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+// --- Not sure yet ---
+function notSureNeoResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-notsure-neo-${substrate}`,
+    summary: 'Mixed-Grade Neocaridina Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Neocaridina davidi — mixed color pack',
+        category: 'livestock',
+        quantity: neoStarterQty(sizeGallons),
+        cost: 25,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...shrimpHardscape(),
+      {
+        name: 'Crushed Coral + Media Bag',
+        category: 'hardscape',
+        detail: 'Optional buffering, goes in the filter not the substrate — only worth adding if your tap water runs naturally soft',
+        cost: 12,
+        status: 'wishlist',
+        defaultSelected: false,
+      },
+      ...substrateItems(substrate),
+      ...shrimpPlants(),
+    ],
+  };
+}
+
+function notSureCaridinaResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-notsure-caridina-${substrate}`,
+    summary: 'Mixed Caridina Starter',
+    items: (sizeGallons) => [
+      {
+        name: 'Caridina — mixed color pack',
+        category: 'livestock',
+        detail: 'Ask your seller which soft-water color varieties they currently have in stock — availability shifts often at this end of the hobby',
+        quantity: caridinaStarterQty(sizeGallons),
+        cost: 5,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      ...tannicHardscapeForCaridina(),
+      ...substrateItems(substrate),
+      {
+        name: 'RO/RODI Water System',
+        category: 'equipment',
+        status: 'idea',
+        defaultSelected: true,
+      },
+      { name: 'Java Moss', category: 'plant', status: 'wishlist', defaultSelected: true },
+    ],
+  };
+}
+
+function otherInvertResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-other-invert-${substrate}`,
+    summary: 'Other Invert Starter',
+    items: () => [
+      {
+        name: 'Invert species (crayfish, ghost shrimp, etc.)',
+        category: 'livestock',
+        status: 'idea',
+        defaultSelected: true,
+        detail:
+          "Species-specific needs vary a lot — confirm adult size, temperament, and water needs with your retailer before finalizing. Many inverts (crayfish especially) are predatory and shouldn't be mixed with a shrimp breeding colony.",
+      },
+      { name: 'Sponge Filter + Air Pump', category: 'equipment', cost: 16, status: 'wishlist', defaultSelected: true },
+      ...substrateItems(substrate),
+    ],
+  };
+}
+
+function buildShrimpColorTree(substrate: SubstrateChoice): Question {
+  return {
+    kind: 'question',
+    id: `q-color-${substrate}`,
+    prompt: "What look are you going for? (Just a starting point — this comes before genus, not the other way around)",
+    options: [
+      { id: 'red', label: 'Red', emoji: '🔴', next: commitmentQuestion(`q-commit-red-${substrate}`, redNeoResult(substrate), redCaridinaResult(substrate)) },
+      { id: 'yellow', label: 'Yellow', emoji: '🟡', next: commitmentQuestion(`q-commit-yellow-${substrate}`, yellowNeoResult(substrate), yellowCaridinaResult(substrate)) },
+      { id: 'blue', label: 'Blue', emoji: '🔵', next: commitmentQuestion(`q-commit-blue-${substrate}`, blueNeoResult(substrate), blueCaridinaResult(substrate)) },
+      { id: 'not-sure', label: 'Not sure yet, show me common options', emoji: '🤔', next: commitmentQuestion(`q-commit-notsure-${substrate}`, notSureNeoResult(substrate), notSureCaridinaResult(substrate)) },
+    ],
+  };
+}
+
+const shrimpQuestionnaire: Question = substrateQuestion((substrate) => ({
   kind: 'question',
-  id: 'q-community-style',
-  prompt: "What kind of community feel are you going for?",
+  id: `q-focus-${substrate}`,
+  prompt: "What's the main focus of this tank?",
+  options: [
+    { id: 'shrimp', label: 'Shrimp', emoji: '🦐', next: buildShrimpColorTree(substrate) },
+    { id: 'other-invert', label: 'Other invert (crayfish, snails, etc.)', emoji: '🦞', next: otherInvertResult(substrate) },
+  ],
+}));
+
+// =========================================================================
+// LIVEBEARERS & FRY
+// Guppies keep the original breeding-vs-simple structure. Mollies and
+// platies are now real, research-grounded content (they used to be
+// "FABRICATED PLACEHOLDER" stubs) — sized and detailed from their actual
+// care differences rather than treated as interchangeable.
+// =========================================================================
+
+function guppyMixedResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-guppy-mixed-${substrate}`,
+    summary: 'Mixed-Gender Guppy Starter (breeding-friendly)',
+    items: (sizeGallons) => {
+      const females = clamp(sizeGallons * 0.6, 6, 15);
+      const males = Math.max(2, Math.round(females / 2.5));
+      return [
+        {
+          name: `Guppies — mixed (${females} female, ${males} male)`,
+          category: 'livestock',
+          detail: '2-3 females per male keeps breeding pressure spread across the group rather than harassing one female',
+          quantity: females + males,
+          cost: (females + males) * 3.5,
+          status: 'wishlist',
+          defaultSelected: true,
+        },
+        { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 76-78°F', cost: 20, status: 'wishlist', defaultSelected: true },
+        { name: 'Sponge Filter', category: 'equipment', detail: 'Preferred over HOB — gentle flow keeps fry from getting pulled in', cost: 16, status: 'wishlist', defaultSelected: true },
+        ...substrateItems(substrate),
+        { name: 'Crushed Coral', category: 'hardscape', detail: 'Guppies want slightly hard water (pH 7.0-8.5) — only add this if your tap water is on the soft side', cost: 10, status: 'wishlist', defaultSelected: false },
+        { name: 'Floating Plants', category: 'plant', detail: "Essential for fry survival and shade — don't skip this if you're keeping mixed genders", status: 'wishlist', defaultSelected: true },
+        { name: 'Guppy Grass', category: 'plant', status: 'wishlist', defaultSelected: true },
+        { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
+      ];
+    },
+  };
+}
+
+function guppyAllMaleResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-guppy-all-male-${substrate}`,
+    summary: 'All-Male Guppy Starter (no breeding)',
+    items: (sizeGallons) => [
+      {
+        name: 'Guppies — all male',
+        category: 'livestock',
+        detail: 'No fry to manage — just pick colors you like',
+        quantity: clamp(sizeGallons * 0.8, 5, 12),
+        cost: 4,
+        status: 'wishlist',
+        defaultSelected: true,
+      },
+      { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 76-78°F', cost: 20, status: 'wishlist', defaultSelected: true },
+      { name: 'Sponge Filter or HOB', category: 'equipment', cost: 18, status: 'wishlist', defaultSelected: true },
+      ...substrateItems(substrate),
+      { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: false },
+      { name: 'Anubias', category: 'plant', status: 'wishlist', defaultSelected: false },
+      { name: 'Floating Plants', category: 'plant', detail: 'Not essential without fry, but still good for shade and cover', status: 'wishlist', defaultSelected: false },
+    ],
+  };
+}
+
+function molliesResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-mollies-${substrate}`,
+    summary: 'Molly Starter',
+    items: (sizeGallons) => {
+      const qty = clamp(sizeGallons / 4, 3, 8);
+      return [
+        {
+          name: 'Mollies (Poecilia sphenops / P. latipinna)',
+          category: 'livestock',
+          detail:
+            `Larger (3-4.5", sailfin varieties bigger still) and more water-sensitive than platies — prefer harder, more alkaline water (pH 7.5-8.5) and benefit from a light dose of aquarium salt. Roughly 1 male per 2-3 females avoids over-breeding pressure. Comfortable from 10 gallons for a small group; sailfin varieties want 20g+.`,
+          quantity: qty,
+          cost: qty * 6,
+          status: 'wishlist',
+          defaultSelected: true,
+        },
+        { name: 'Aquarium Salt (optional)', category: 'equipment', detail: 'Not required, but many mollies tolerate and benefit from a light dose, especially with naturally soft tap water', cost: 5, status: 'wishlist', defaultSelected: false },
+        { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 75-80°F', cost: 20, status: 'wishlist', defaultSelected: true },
+        { name: 'Hang-On-Back or Sponge Filter', category: 'equipment', detail: 'Mollies produce more waste than platies — err toward stronger filtration', cost: 22, status: 'wishlist', defaultSelected: true },
+        ...substrateItems(substrate),
+        { name: 'Crushed Coral', category: 'hardscape', detail: 'Helps hold the harder, more alkaline water mollies prefer — worth adding if your tap water runs soft', cost: 10, status: 'wishlist', defaultSelected: false },
+        { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: true },
+        { name: 'Floating Plants', category: 'plant', status: 'wishlist', defaultSelected: false },
+      ];
+    },
+  };
+}
+
+function platiesResult(substrate: SubstrateChoice): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-platies-${substrate}`,
+    summary: 'Platy Starter',
+    items: (sizeGallons) => {
+      const qty = clamp(sizeGallons / 2, 3, 12);
+      return [
+        {
+          name: 'Platies (Xiphophorus maculatus / X. variatus)',
+          category: 'livestock',
+          detail:
+            'Hardier and more tolerant of imperfect water than mollies, and smaller (males ~1.5", females ~2.5"). Roughly 1 male per 2-3 females keeps breeding pressure manageable. Comfortable from 10 gallons up — one of the most forgiving livebearers for a first tank.',
+          quantity: qty,
+          cost: qty * 5,
+          status: 'wishlist',
+          defaultSelected: true,
+        },
+        { name: 'Adjustable Heater', category: 'equipment', detail: 'Target 72-78°F', cost: 20, status: 'wishlist', defaultSelected: true },
+        { name: 'Sponge Filter or HOB', category: 'equipment', cost: 18, status: 'wishlist', defaultSelected: true },
+        ...substrateItems(substrate),
+        { name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: true },
+        { name: 'Floating Plants', category: 'plant', detail: "Good fry cover if you don't mind population growth", status: 'wishlist', defaultSelected: false },
+      ];
+    },
+  };
+}
+
+const livebearersQuestionnaire: Question = substrateQuestion((substrate) => ({
+  kind: 'question',
+  id: `q-livebearer-species-${substrate}`,
+  prompt: 'Which livebearer are you focusing on?',
   options: [
     {
-      id: 'shrimp-inclusive',
-      label: 'Peaceful community mixed with shrimp/inverts',
-      emoji: '🦐',
-      next: shrimpInclusiveCommunityResult,
-    },
-    {
-      id: 'classic',
-      label: 'Classic centerpiece + school + cleanup crew',
-      emoji: '🐠',
+      id: 'guppies',
+      label: 'Guppies — classic, most color variety',
+      emoji: '🐟',
       next: {
         kind: 'question',
-        id: 'q-community-school',
-        prompt: 'Which schooling fish do you prefer?',
+        id: `q-guppy-breeding-${substrate}`,
+        prompt: 'Do you want to breed guppies, or keep it low-maintenance?',
         options: [
-          {
-            id: 'ember-tetra',
-            label: 'Ember Tetras (tiny, fiery red-orange)',
-            emoji: '🔥',
-            next: classicCommunityResult('Ember Tetras', 'Groups of 6+ significantly reduce stress'),
-          },
-          {
-            id: 'harlequin-rasbora',
-            label: 'Harlequin Rasboras (classic look, slightly larger)',
-            emoji: '🔺',
-            next: classicCommunityResult('Harlequin Rasboras', 'Groups of 6+ significantly reduce stress'),
-          },
+          { id: 'mixed', label: "I don't mind fry — mixed gender", emoji: '🍼', next: guppyMixedResult(substrate) },
+          { id: 'all-male', label: 'Keep it simple — all-male, no breeding', emoji: '🚫', next: guppyAllMaleResult(substrate) },
         ],
       },
     },
+    { id: 'mollies', label: 'Mollies — larger, glossier, more water-sensitive', emoji: '🐠', next: molliesResult(substrate) },
+    { id: 'platies', label: 'Platies — smaller, hardier, very low-maintenance', emoji: '🐠', next: platiesResult(substrate) },
   ],
-};
+}));
+
+// =========================================================================
+// COMMUNITY FISH
+// Previously both branches here were either a direct copy of one specific
+// real tank, or a species-name-recognition question ("ember tetras or
+// harlequin rasboras?") that assumes the answerer already knows what those
+// are. Replaced with trait-based questions (include shrimp? how lively?)
+// and size-tiered species picks grounded in actual nano/community stocking
+// guidance — a 6-gallon and a 25-gallon community tank now get genuinely
+// different suggestions, not the same list with different quantities.
+// =========================================================================
+
+function communityResult(
+  substrate: SubstrateChoice,
+  withShrimp: boolean,
+  activity: 'calm' | 'lively'
+): QuestionResult {
+  return {
+    kind: 'result',
+    id: `r-community-${substrate}-${withShrimp ? 'shrimp' : 'fishonly'}-${activity}`,
+    summary: `${activity === 'calm' ? 'Calm, understated' : 'Lively, active'} community${withShrimp ? ' + shrimp' : ''}`,
+    items: (sizeGallons) => {
+      const items: RecommendedRosterItem[] = [];
+
+      if (activity === 'calm') {
+        if (sizeGallons < 10) {
+          items.push({
+            name: 'Chili Rasboras',
+            category: 'livestock',
+            detail: 'One of the smallest schooling fish in the hobby (under 1"). Workable from 5 gallons, but water quality shifts fast at this size — keep a close eye early on.',
+            quantity: clamp(sizeGallons * 1.6, 8, 15),
+            cost: 4,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+        } else {
+          items.push({
+            name: 'Celestial Pearl Danios (Galaxy Rasboras)',
+            category: 'livestock',
+            detail: 'Calm, shy schoolers that want a mature, stable tank rather than a freshly cycled one. Minimum 10 gallons.',
+            quantity: clamp(sizeGallons * 1, 10, 20),
+            cost: 5,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+          items.push({
+            name: 'Pygmy Corydoras',
+            category: 'livestock',
+            detail: 'Small, social bottom-dweller that schools both along the substrate and in open water — unusual for a cory',
+            quantity: clamp(sizeGallons * 0.6, 6, 12),
+            cost: 6,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+        }
+      } else {
+        if (sizeGallons < 10) {
+          items.push({
+            name: "Endler's Livebearers",
+            category: 'livestock',
+            detail: "Hardy, constantly active, and one of the most beginner-forgiving nano fish. Workable from 5 gallons. Keep males-only if you don't want a population boom.",
+            quantity: clamp(sizeGallons * 1.2, 5, 12),
+            cost: 5,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+        } else if (sizeGallons < 20) {
+          items.push({
+            name: 'Ember Tetras',
+            category: 'livestock',
+            detail: 'Small, budget-friendly, and more tolerant of a wider pH range than most nano tetras — a genuinely easy schooling fish. Minimum 10 gallons, 8+ for confident schooling.',
+            quantity: clamp(sizeGallons * 1, 8, 15),
+            cost: 4,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+          items.push({
+            name: 'Pygmy Corydoras',
+            category: 'livestock',
+            detail: "Small bottom-cleanup crew that won't outcompete nano schooling fish for food",
+            quantity: clamp(sizeGallons * 0.5, 6, 10),
+            cost: 6,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+        } else {
+          items.push({
+            name: 'Honey Gourami',
+            category: 'livestock',
+            detail: 'Peaceful centerpiece fish, calmer than most other gourami species — top-to-mid water column',
+            quantity: 1,
+            cost: 12,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+          items.push({
+            name: 'Harlequin Rasboras',
+            category: 'livestock',
+            detail: 'A bit bigger and bolder than chili/ember tetras — wants more open swimming room, which is why this shows up once the tank is 20+ gallons',
+            quantity: clamp(sizeGallons * 0.5, 9, 15),
+            cost: 4,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+          items.push({
+            name: 'Pygmy Corydoras',
+            category: 'livestock',
+            detail: 'Bottom cleanup crew — Otocinclus is a reasonable swap for more algae focus and less social-grouping need',
+            quantity: clamp(sizeGallons * 0.4, 6, 10),
+            cost: 6,
+            status: 'wishlist',
+            defaultSelected: true,
+          });
+        }
+      }
+
+      if (withShrimp) {
+        items.push({
+          name: 'Neocaridina davidi (color of your choice)',
+          category: 'livestock',
+          detail: "Hardier and more forgiving than Caridina, and a good match for a mixed-fish tank since it doesn't need especially soft water",
+          quantity: neoStarterQty(sizeGallons),
+          cost: 3.5,
+          status: 'wishlist',
+          defaultSelected: true,
+        });
+        items.push({
+          name: 'Nerite Snails',
+          category: 'livestock',
+          detail: "Won't breed in freshwater, so the population stays exactly where you set it",
+          quantity: clamp(sizeGallons * 0.3, 2, 6),
+          cost: 4,
+          status: 'wishlist',
+          defaultSelected: true,
+        });
+      } else {
+        items.push({
+          name: 'Nerite Snails (optional cleanup crew)',
+          category: 'livestock',
+          quantity: clamp(sizeGallons * 0.3, 2, 5),
+          cost: 4,
+          status: 'wishlist',
+          defaultSelected: false,
+        });
+      }
+
+      items.push({
+        name: 'Driftwood',
+        category: 'hardscape',
+        detail: "Anchors epiphyte plants (Java Fern, Anubias) so they don't need to be planted in substrate",
+        cost: 20,
+        status: 'wishlist',
+        defaultSelected: true,
+      });
+      items.push({
+        name: 'Sponge Filter or Hang-On-Back Filter',
+        category: 'equipment',
+        detail: 'If using a HOB, dial the flow down — full current can be too strong for small schooling fish',
+        cost: 25,
+        status: 'wishlist',
+        defaultSelected: true,
+      });
+      items.push(...substrateItems(substrate));
+      items.push({ name: 'Java Fern', category: 'plant', status: 'wishlist', defaultSelected: true });
+      items.push({ name: 'Anubias Nana', category: 'plant', status: 'wishlist', defaultSelected: true });
+      items.push({
+        name: 'Floating Plants',
+        category: 'plant',
+        detail: 'Shade and cover at the surface, especially valuable for shyer schoolers',
+        status: 'wishlist',
+        defaultSelected: false,
+      });
+
+      return items;
+    },
+  };
+}
+
+function communityActivityQuestion(substrate: SubstrateChoice, withShrimp: boolean): Question {
+  return {
+    kind: 'question',
+    id: `q-community-activity-${substrate}-${withShrimp}`,
+    prompt: 'How would you like the fish to feel in the tank?',
+    options: [
+      { id: 'calm', label: 'Calm & understated — small, shy schoolers', emoji: '🌊', next: communityResult(substrate, withShrimp, 'calm') },
+      { id: 'lively', label: 'Lively & active — bigger schools, more constant motion', emoji: '⚡', next: communityResult(substrate, withShrimp, 'lively') },
+    ],
+  };
+}
+
+const communityQuestionnaire: Question = substrateQuestion((substrate) => ({
+  kind: 'question',
+  id: `q-community-shrimp-${substrate}`,
+  prompt: 'Do you want shrimp or snails mixed into this community?',
+  options: [
+    { id: 'yes', label: 'Yes, include shrimp/inverts', emoji: '🦐', next: communityActivityQuestion(substrate, true) },
+    { id: 'no', label: 'No, fish only', emoji: '🐠', next: communityActivityQuestion(substrate, false) },
+  ],
+}));
 
 export const TANK_TEMPLATES: TankTemplate[] = [
   {
     id: 'shrimp',
     name: 'Shrimp / Invert Colony',
     description: 'Neocaridina, Caridina, crayfish, or other invert-focused breeder tanks.',
-    suggestedStyle: 'Walstad-style shrimp colony',
     customFields: [preset('🦐 Shrimp Census'), preset('🥚 Berried / Gravid Count')],
     questionnaire: shrimpQuestionnaire,
     checklist: [
@@ -436,7 +889,6 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     id: 'livebearers',
     name: 'Livebearers & Fry',
     description: 'Guppies, mollies, platies — tanks where fry counts matter.',
-    suggestedStyle: 'Community livebearer tank',
     customFields: [preset('🐠 Adult Count'), preset('🐟 Fry Count'), preset('🤰 Pregnant Females')],
     questionnaire: livebearersQuestionnaire,
     checklist: [
@@ -452,7 +904,6 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     id: 'community',
     name: 'Community Fish',
     description: 'Mixed peaceful community fish tanks.',
-    suggestedStyle: 'Mixed community tank',
     customFields: [preset('🐡 Total Fish Count'), preset('🤒 Signs Of Illness')],
     questionnaire: communityQuestionnaire,
     checklist: [
@@ -467,7 +918,6 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     id: 'solo-fish',
     name: 'Solo Fish / Centerpiece',
     description: 'Betta, oscar, or cichlid kept alone — one dominant fish, no tankmates.',
-    suggestedStyle: 'Solo centerpiece fish tank',
     customFields: [preset('🤒 Signs Of Illness'), preset('🪭 Fin Condition'), preset('📝 Feeding Notes')],
     checklist: [
       { label: 'Source tank, substrate, and hardscape' },
@@ -483,7 +933,6 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     id: 'planted',
     name: 'Planted-Only',
     description: 'No livestock focus — tracking growth, trims, and layout.',
-    suggestedStyle: 'Low-tech planted tank',
     customFields: [preset('🌱 New Growth Observed'), preset('✂️ Trim Needed')],
     checklist: [
       { label: 'Source substrate and hardscape' },
@@ -496,7 +945,6 @@ export const TANK_TEMPLATES: TankTemplate[] = [
     id: 'blank',
     name: 'Blank',
     description: 'Start with nothing pre-filled — add your own fields and steps as you go.',
-    suggestedStyle: '',
     customFields: [],
     checklist: [],
   },
@@ -543,11 +991,12 @@ export function buildTankFromTemplate(
     name: overrides.name,
     sizeGallons: overrides.sizeGallons,
     dimensions: overrides.dimensions || undefined,
-    style: overrides.style || template.suggestedStyle || undefined,
+    style: overrides.style || undefined,
     startDate: '',
     customFields: template.customFields.map((f) => ({ ...f, id: crypto.randomUUID() })),
     roster,
     checklist,
     logs: [],
+    schedule: [],
   };
 }

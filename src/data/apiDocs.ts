@@ -46,6 +46,7 @@ The file must be a single JSON object:
 | roster | array of RosterItem | yes, can be \`[]\` | See below |
 | checklist | array of ChecklistTask | yes, can be \`[]\` | See below |
 | logs | array | yes | Always output as \`[]\` — log entries are written by the user later, never generated |
+| schedule | array of ScheduleTask | no, can be \`[]\` or omitted | See below. Only include if the plan mentions a recurring cadence (e.g. "weekly water changes") or a specific one-off date |
 
 ## CustomFieldDef
 
@@ -126,6 +127,22 @@ on step A, step A's object must come before step B's object in the array.
 Always list checklist steps in the actual order they'd realistically be
 completed — phase by phase, task by task within each phase.
 
+## ScheduleTask
+
+A maintenance reminder — recurring (e.g. weekly water changes) or a one-off
+date. Optional; omit entirely, or output \`[]\`, if the plan doesn't mention
+any recurring cadence.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| id | string | yes | unique within this tank |
+| label | string | yes | e.g. "Water change", "Dose Bacter AE" |
+| detail | string | no | |
+| dueDate | string | yes | ISO date (\`YYYY-MM-DD\`) of the first/next occurrence |
+| recurrenceDays | number | no | Omit for a one-off reminder. Set to the repeat interval in days (7 for weekly, 14 for biweekly, etc.) |
+| endDate | string | no | ISO date. Recurring only — caps how far the series repeats; omit for an indefinitely-repeating reminder. Only include if the plan states a clear end point (e.g. "50% weekly water changes for the first month") |
+| done | boolean | no | Only meaningful for one-off tasks; omit or \`false\` for a new plan |
+
 ## Generation guidelines
 
 - Read the plan for: (1) purchasable items with approximate costs, (2) a
@@ -141,6 +158,12 @@ completed — phase by phase, task by task within each phase.
   roster item requiring \`"arrived"\`.
 - Custom fields should reflect what's actually worth tracking for this
   specific tank — not every tank needs the same fields.
+- If the plan mentions a maintenance cadence (weekly water changes, dosing
+  schedule, feeding routine), include it as a ScheduleTask with
+  \`recurrenceDays\` set. Don't invent a cadence the plan never mentions.
+  If the plan gives that cadence a clear end point (e.g. "weekly for the
+  first month, then normal maintenance"), set \`endDate\` accordingly —
+  otherwise leave it out so the reminder just repeats indefinitely.
 - If part of the plan is an open/undecided item (e.g. "still deciding on a
   centerpiece fish"), include it as a roster item with \`status: "idea"\`
   and a detail note explaining what's undecided — its cost won't count
@@ -172,7 +195,10 @@ completed — phase by phase, task by task within each phase.
         { "id": "c-cycle", "label": "Cycle the tank fully", "done": false, "dependsOn": ["c-tank"] },
         { "id": "c-stock", "label": "Add guppies", "done": false, "dependsOn": ["c-cycle"], "rosterLinks": [{ "rosterItemId": "r-guppies", "requiredStatus": "arrived" }] }
       ],
-      "logs": []
+      "logs": [],
+      "schedule": [
+        { "id": "s-water", "label": "Water change", "dueDate": "2025-01-06", "recurrenceDays": 7, "endDate": "2025-02-03" }
+      ]
     }
   ]
 }

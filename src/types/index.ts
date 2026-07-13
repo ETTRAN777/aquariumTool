@@ -59,6 +59,28 @@ export interface LogEntry {
   photoUrls?: string[]; // base64 or /photos/ relative paths
   customValues?: Record<string, CustomFieldValue>; // keyed by CustomFieldDef.id
   mood?: 'thriving' | 'stable' | 'watching' | 'concerned';
+  // ScheduleTask ids completed on this same calendar day, auto-attached when
+  // a matching log entry already exists — see completeScheduleTask in
+  // DataContext. Never causes a log entry to be created; only annotates one
+  // that's already there.
+  completedScheduleTaskIds?: string[];
+}
+
+// A maintenance reminder: either recurring (water changes, dosing, feeding —
+// `recurrenceDays` set) or one-off (`recurrenceDays` absent, `done` tracks
+// completion). Recurring tasks never really finish — completing one just
+// rolls `dueDate` forward by `recurrenceDays` from the completion date —
+// unless `endDate` is set, in which case a completion that would roll past
+// it retires the task (marks it done) instead of continuing indefinitely.
+export interface ScheduleTask {
+  id: string;
+  label: string;
+  detail?: string;
+  dueDate: string; // ISO date — next occurrence for recurring, the one date for one-off
+  recurrenceDays?: number; // e.g. 7 for weekly. Absent = one-off task.
+  endDate?: string; // ISO date — optional. Recurring only; caps how far the series projects/repeats.
+  done?: boolean; // one-off tasks only, or a recurring task that's passed its endDate
+  lastCompletedDate?: string; // ISO date of most recent completion, if any
 }
 
 export interface Tank {
@@ -72,6 +94,7 @@ export interface Tank {
   roster: RosterItem[];
   checklist: ChecklistTask[];
   logs: LogEntry[];
+  schedule: ScheduleTask[];
 }
 
 // --- Recommended-roster questionnaire ---
@@ -98,7 +121,12 @@ export interface QuestionResult {
   kind: 'result';
   id: string;
   summary: string;
-  items: RecommendedRosterItem[];
+  // A result's items can depend on the tank's own size — e.g. a starter
+  // shrimp colony or a schooling-fish count should scale with gallons
+  // rather than suggesting the same fixed quantity for a 5-gallon nano and
+  // a 30-gallon tank. Static arrays still work unchanged for results where
+  // scaling doesn't apply (most equipment/hardscape items).
+  items: RecommendedRosterItem[] | ((sizeGallons: number) => RecommendedRosterItem[]);
 }
 
 export type QuestionNode = Question | QuestionResult;

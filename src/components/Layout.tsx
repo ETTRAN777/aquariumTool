@@ -8,6 +8,7 @@ const navItems = [
   { to: '/roster', label: 'Roster' },
   { to: '/checklist', label: 'Build Checklist' },
   { to: '/log', label: 'Weekly Log' },
+  { to: '/schedule', label: 'Schedule' },
   { to: '/charts', label: 'Parameters' },
 ];
 
@@ -44,11 +45,30 @@ export default function Layout() {
             className="font-display text-3xl md:text-4xl font-semibold text-foam bg-transparent border-none outline-none cursor-pointer -ml-1 max-w-full"
           >
             {data.tanks.map((t) => (
-              <option key={t.id} value={t.id} className="bg-deepwater text-base font-body">
+              <option
+                key={t.id}
+                value={t.id}
+                style={{
+                  backgroundColor: 'var(--color-deepwater)',
+                  color: 'var(--color-foam)',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '1rem',
+                  fontWeight: 400,
+                }}
+              >
                 {t.name}
               </option>
             ))}
-            <option value={NEW_TANK_VALUE} className="bg-deepwater text-base font-body">
+            <option
+              value={NEW_TANK_VALUE}
+              style={{
+                backgroundColor: 'var(--color-deepwater)',
+                color: 'var(--color-foam)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '1rem',
+                fontWeight: 400,
+              }}
+            >
               + New tank…
             </option>
           </select>

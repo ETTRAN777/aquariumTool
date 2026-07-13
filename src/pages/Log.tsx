@@ -72,6 +72,11 @@ export default function Log() {
                   <p className="font-mono text-xs text-sand uppercase tracking-wide">
                     {entry.weekLabel} · {new Date(entry.date).toLocaleDateString()}
                     {entry.mood && <span className="ml-2">{MOOD_LABELS[entry.mood]}</span>}
+                    {entry.completedScheduleTaskIds && entry.completedScheduleTaskIds.length > 0 && (
+                      <span className="ml-2 text-moss-light">
+                        🔗 {entry.completedScheduleTaskIds.length} done
+                      </span>
+                    )}
                   </p>
                   {customFields.length > 0 && entry.customValues && (
                     <span className="text-xs font-mono text-foam-dim">
@@ -119,6 +124,24 @@ export default function Log() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {entry.completedScheduleTaskIds && entry.completedScheduleTaskIds.length > 0 && (
+                    <div>
+                      <p className="field-label mb-1.5">Maintenance done this day</p>
+                      <div className="flex flex-wrap gap-2">
+                        {entry.completedScheduleTaskIds.map((taskId) => {
+                          const task = activeTank.schedule.find((t) => t.id === taskId);
+                          return (
+                            <span
+                              key={taskId}
+                              className="pill py-1 px-2 font-mono text-xs bg-moss/15 border border-moss/30 text-foam-dim"
+                            >
+                              ✓ {task?.label ?? '(removed reminder)'}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {entry.photoUrls && entry.photoUrls.length > 0 && (

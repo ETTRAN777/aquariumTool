@@ -3,10 +3,12 @@ import type { Question, QuestionNode, QuestionOption, RecommendedRosterItem } fr
 
 export default function TankQuestionnaire({
   root,
+  sizeGallons,
   onComplete,
   onSkip,
 }: {
   root: Question;
+  sizeGallons: number;
   onComplete: (items: RecommendedRosterItem[]) => void;
   onSkip: () => void;
 }) {
@@ -56,7 +58,7 @@ export default function TankQuestionnaire({
           </div>
         </div>
       ) : (
-        <ResultPicker result={current} onComplete={onComplete} />
+        <ResultPicker result={current} sizeGallons={sizeGallons} onComplete={onComplete} />
       )}
     </div>
   );
@@ -64,12 +66,15 @@ export default function TankQuestionnaire({
 
 function ResultPicker({
   result,
+  sizeGallons,
   onComplete,
 }: {
   result: Extract<QuestionNode, { kind: 'result' }>;
+  sizeGallons: number;
   onComplete: (items: RecommendedRosterItem[]) => void;
 }) {
-  const [checked, setChecked] = useState<boolean[]>(result.items.map((i) => i.defaultSelected));
+  const items = typeof result.items === 'function' ? result.items(sizeGallons) : result.items;
+  const [checked, setChecked] = useState<boolean[]>(items.map((i) => i.defaultSelected));
 
   function toggle(i: number) {
     setChecked((c) => c.map((v, idx) => (idx === i ? !v : v)));
@@ -82,7 +87,7 @@ function ResultPicker({
       <p className="font-mono text-xs text-sand uppercase tracking-wide mb-1">Recommended for</p>
       <p className="font-display text-xl font-semibold mb-4">{result.summary}</p>
       <div className="space-y-2 mb-4">
-        {result.items.map((item, i) => (
+        {items.map((item, i) => (
           <label
             key={item.name}
             className="flex items-start gap-3 p-3 rounded-lg border border-moss/20 bg-deepwater-2 cursor-pointer"
@@ -112,7 +117,7 @@ function ResultPicker({
       </div>
       <button
         type="button"
-        onClick={() => onComplete(result.items.filter((_, i) => checked[i]))}
+        onClick={() => onComplete(items.filter((_, i) => checked[i]))}
         className="btn btn-primary w-full"
       >
         Add {selectedCount} item{selectedCount === 1 ? '' : 's'} to roster

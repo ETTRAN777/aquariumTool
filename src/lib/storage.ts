@@ -49,6 +49,7 @@ function normalizeTank(raw: any): Tank {
     roster: Array.isArray(raw.roster) ? raw.roster : [],
     checklist: Array.isArray(raw.checklist) ? raw.checklist : [],
     logs,
+    schedule: Array.isArray(raw.schedule) ? raw.schedule : [],
   };
 }
 

@@ -27,7 +27,6 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
 
   function pickTemplate(t: TankTemplate) {
     setSelected(t);
-    if (t.suggestedStyle && !style) setStyle(t.suggestedStyle);
   }
 
   function finishCreate(recommendedItems: RecommendedRosterItem[] = []) {
@@ -124,6 +123,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         </div>
         <TankQuestionnaire
           root={selected.questionnaire}
+          sizeGallons={pendingDetails.sizeGallons}
           onComplete={(items) => finishCreate(items)}
           onSkip={() => finishCreate([])}
         />
@@ -209,7 +209,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
               <input
                 value={style}
                 onChange={(e) => setStyle(e.target.value)}
-                placeholder={selected.suggestedStyle || 'Low-tech planted'}
+                placeholder="Low-tech planted, biotope, minimalist hardscape, blackwater"
                 className="field"
               />
             </div>
