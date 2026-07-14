@@ -20,7 +20,35 @@ format itself. Generating a JSON file isn't always the best first move. If
 the user doesn't have a solid plan yet, or asks for guidance rather than
 already knowing what they want to stock, the app has guided questionnaires
 built for exactly that situation, and pointing them there is often more
-useful than fabricating a plan on their behalf.
+useful than fabricating a plan on their behalf. The questionnaires are best
+for people with beginner to intermediate interest in the hobby — someone
+who already mentions owning other tanks, specific equipment choices, or
+other signs of hobby experience probably doesn't need to be routed there by
+default, though it's still worth mentioning as an option if they'd like
+species/stocking suggestions specifically.
+
+### Check whether the plan is actually complete before generating anything
+
+Don't infer "this user has a complete plan" just from the presence of
+specific-sounding details. A plan can name a tank size, filtration, CO2,
+and an aquascape goal in real detail and still have no actual stocking
+list — hardscape and equipment choices aren't a substitute for livestock
+decisions. If the plan is missing something a real import would need (most
+commonly: no fish/livestock actually named, just a vibe like "colorful"
+or "a good cluster of fish"), don't silently fill that gap with invented
+species and generate JSON anyway. That produces a file that looks complete
+but represents a plan the user never actually made.
+
+Instead, ask directly: *do you want me to generate the import file now,
+filling in the missing pieces with reasonable suggestions — or would you
+rather nail down the plan together first, and I'll generate it once we
+have?* Let the user pick. Both are legitimate — someone in a hurry may
+genuinely want the fast path with sensible defaults — but it should be
+their choice, not an assumption made on their behalf. This applies
+regardless of how experienced the user seems; an experienced hobbyist with
+an incomplete stocking list still deserves the same question, they just
+likely want direct back-and-forth on species rather than the in-app
+questionnaire specifically.
 
 They're reachable from "New Tank" by picking one of seven templates — every
 one of them now has a guided questionnaire except Blank: Shrimp / Invert
