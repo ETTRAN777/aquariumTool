@@ -35,6 +35,7 @@ export default function Log() {
         <EntryForm
           weekNumber={activeTank.logs.length + 1}
           customFields={customFields}
+          waterType={activeTank.waterType}
           onSubmit={(entry) => {
             addLogEntry(entry);
             setShowForm(false);
@@ -51,6 +52,7 @@ export default function Log() {
               key={entry.id}
               initial={entry}
               customFields={customFields}
+              waterType={activeTank.waterType}
               onSubmit={(updated) => {
                 updateLogEntry({ ...updated, id: entry.id, date: entry.date, weekLabel: entry.weekLabel });
                 setEditingId(null);
@@ -208,6 +210,7 @@ function paramLabel(key: string) {
     ammonia: 'NH₃',
     nitrite: 'NO₂',
     nitrate: 'NO₃',
+    salinity: 'Salinity (SG)',
   };
   return labels[key] ?? key;
 }
@@ -216,6 +219,7 @@ function EntryForm({
   initial,
   weekNumber,
   customFields,
+  waterType,
   onSubmit,
   onCancel,
   submitLabel,
@@ -224,6 +228,7 @@ function EntryForm({
   initial?: LogEntry;
   weekNumber?: number;
   customFields: CustomFieldDef[];
+  waterType: 'freshwater' | 'saltwater';
   onSubmit: (entry: LogEntry) => void;
   onCancel: () => void;
   submitLabel: string;
@@ -332,9 +337,21 @@ function EntryForm({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <ParamInput label="Temp °F" value={params.temperature} onChange={(v) => setParam('temperature', v)} />
           <ParamInput label="pH" step="0.1" value={params.ph} onChange={(v) => setParam('ph', v)} />
-          <ParamInput label="GH" value={params.gh} onChange={(v) => setParam('gh', v)} />
-          <ParamInput label="KH" value={params.kh} onChange={(v) => setParam('kh', v)} />
-          <ParamInput label="TDS" value={params.tds} onChange={(v) => setParam('tds', v)} />
+          {waterType === 'freshwater' && (
+            <>
+              <ParamInput label="GH" value={params.gh} onChange={(v) => setParam('gh', v)} />
+              <ParamInput label="KH" value={params.kh} onChange={(v) => setParam('kh', v)} />
+              <ParamInput label="TDS" value={params.tds} onChange={(v) => setParam('tds', v)} />
+            </>
+          )}
+          {waterType === 'saltwater' && (
+            <ParamInput
+              label="Salinity (SG)"
+              step="0.001"
+              value={params.salinity}
+              onChange={(v) => setParam('salinity', v)}
+            />
+          )}
           <ParamInput label="NH₃" step="0.1" value={params.ammonia} onChange={(v) => setParam('ammonia', v)} />
           <ParamInput label="NO₂" step="0.1" value={params.nitrite} onChange={(v) => setParam('nitrite', v)} />
           <ParamInput label="NO₃" value={params.nitrate} onChange={(v) => setParam('nitrate', v)} />

@@ -17,6 +17,7 @@ const COLORS = {
   nitrite: '#5C8A6C',
   nitrate: '#C9A876',
   tds: '#EDF3EE',
+  salinity: '#7FB3D5',
   temperature: '#E8A23D',
 };
 
@@ -55,6 +56,7 @@ export default function Charts() {
       nitrite: l.params?.nitrite,
       nitrate: l.params?.nitrate,
       tds: l.params?.tds,
+      salinity: l.params?.salinity,
       temperature: l.params?.temperature,
       mood: moodToScore(l.mood),
     };
@@ -82,7 +84,10 @@ export default function Charts() {
   const hasNitrogenData = chartData.some(
     (d) => d.ammonia !== undefined || d.nitrite !== undefined || d.nitrate !== undefined
   );
-  const hasPhTdsData = chartData.some((d) => d.ph !== undefined || d.tds !== undefined);
+  const isSaltwater = activeTank.waterType === 'saltwater';
+  const hasPhTdsData = chartData.some(
+    (d) => d.ph !== undefined || (isSaltwater ? d.salinity !== undefined : d.tds !== undefined)
+  );
   const hasTemperatureData = chartData.some((d) => d.temperature !== undefined);
   const hasCustomData = numericFields.some((f) => chartData.some((d) => d[f.id] !== undefined));
   const hasMoodData = chartData.some((d) => d.mood !== undefined);
@@ -141,7 +146,7 @@ export default function Charts() {
       )}
 
       {hasPhTdsData && (
-        <ChartCard title="pH & TDS">
+        <ChartCard title={isSaltwater ? 'pH & Salinity' : 'pH & TDS'}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
@@ -157,7 +162,11 @@ export default function Charts() {
             <Tooltip content={DarkTooltip} isAnimationActive={false} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Line type="monotone" dataKey="ph" name="pH" stroke={COLORS.ph} strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="tds" name="TDS" stroke={COLORS.tds} strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
+            {isSaltwater ? (
+              <Line type="monotone" dataKey="salinity" name="Salinity (SG)" stroke={COLORS.salinity} strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
+            ) : (
+              <Line type="monotone" dataKey="tds" name="TDS" stroke={COLORS.tds} strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
+            )}
           </LineChart>
         </ChartCard>
       )}

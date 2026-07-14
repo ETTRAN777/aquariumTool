@@ -6,11 +6,13 @@ export default function TankQuestionnaire({
   sizeGallons,
   onComplete,
   onSkip,
+  onExit,
 }: {
   root: Question;
   sizeGallons: number;
   onComplete: (items: RecommendedRosterItem[]) => void;
   onSkip: () => void;
+  onExit: () => void;
 }) {
   // History stack, not just "current node" — lets Back actually rewind
   // instead of just resetting to the start.
@@ -33,7 +35,9 @@ export default function TankQuestionnaire({
             ← Back
           </button>
         ) : (
-          <span />
+          <button type="button" onClick={onExit} className="btn-icon">
+            ← Change template
+          </button>
         )}
         <button type="button" onClick={onSkip} className="text-xs text-amber hover:underline">
           I know what I'm doing — skip this
@@ -85,12 +89,24 @@ function ResultPicker({
   return (
     <div>
       <p className="font-mono text-xs text-sand uppercase tracking-wide mb-1">Recommended for</p>
-      <p className="font-display text-xl font-semibold mb-4">{result.summary}</p>
+      <p className="font-display text-xl font-semibold mb-2">{result.summary}</p>
+      {items.some((i) => i.warning) && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 px-3 py-2">
+          <span className="text-coral text-sm font-semibold">⚠ Heads up</span>
+          <span className="text-xs text-coral/90">
+            {items.filter((i) => i.warning).length === 1
+              ? '1 item below may not fit this tank size well'
+              : `${items.filter((i) => i.warning).length} items below may not fit this tank size well`}
+          </span>
+        </div>
+      )}
       <div className="space-y-2 mb-4">
         {items.map((item, i) => (
           <label
             key={item.name}
-            className="flex items-start gap-3 p-3 rounded-lg border border-moss/20 bg-deepwater-2 cursor-pointer"
+            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer ${
+              item.warning ? 'border-coral/40 bg-coral/5' : 'border-moss/20 bg-deepwater-2'
+            }`}
           >
             <input
               type="checkbox"
@@ -106,6 +122,11 @@ function ResultPicker({
                 ) : null}
                 {item.cost !== undefined && (
                   <span className="font-mono text-xs text-sand">${item.cost.toFixed(2)}</span>
+                )}
+                {item.warning && (
+                  <span className="pill text-[11px] py-0.5 px-2 bg-coral/20 text-coral border border-coral/30 font-semibold">
+                    ⚠ {item.warning}
+                  </span>
                 )}
               </div>
               {item.detail && (

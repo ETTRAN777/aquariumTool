@@ -17,16 +17,18 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
   const { data, createTank, updateTank } = useData();
   const [selected, setSelected] = useState<TankTemplate | null>(null);
   const [name, setName] = useState('');
-  const [sizeGallons, setSizeGallons] = useState('10');
+  const [sizeGallons, setSizeGallons] = useState('');
   const [dimensions, setDimensions] = useState('');
   const [style, setStyle] = useState('');
   const [pendingDetails, setPendingDetails] = useState<PendingTankDetails | null>(null);
+  const [sizeError, setSizeError] = useState<string | null>(null);
 
   const [importedTanks, setImportedTanks] = useState<Tank[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   function pickTemplate(t: TankTemplate) {
     setSelected(t);
+    setSizeError(null);
   }
 
   function finishCreate(recommendedItems: RecommendedRosterItem[] = []) {
@@ -40,11 +42,42 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !selected) return;
+
+    // The `required` attribute on the input blocks a fully-empty submit at
+    // the browser level, but that's not airtight on its own — a value like
+    // "-3" or "0" passes `required` (it's non-empty) while still being
+    // meaningless as a tank size. This check is the real gate: it demands
+    // an actual positive number rather than falling back to a default like
+    // `Number(sizeGallons) || 10` would. That fallback pattern is the
+    // trap — `Number('')` is `0`, which is falsy, so leaving the field
+    // untouched (relying on the placeholder as if it were the value)
+    // silently produced a real "10" tank behind the scenes. Blank was
+    // never actually 10; it just looked like it because the placeholder
+    // text is visually identical to real input. Rejecting it explicitly
+    // here closes that gap.
+    const parsedGallons = Number(sizeGallons);
+    if (sizeGallons.trim() === '' || !Number.isFinite(parsedGallons) || parsedGallons <= 0) {
+      setSizeError('Enter a tank size — this field can\'t be left blank.');
+      return;
+    }
+
+    if (parsedGallons < selected.minGallons) {
+      setSizeError(
+        `${selected.name} needs at least ${selected.minGallons} gallons to work at all — this size won't support it. Try a bigger tank, or a different template.`
+      );
+      return;
+    }
+    setSizeError(null);
+
+    // An empty description defaults to the template name — "Your Tank"
+    // specifically for Blank, since it has no template name worth reusing.
+    const defaultDescription = selected.id === 'blank' ? 'Your Tank' : selected.name;
+
     const details: PendingTankDetails = {
       name: name.trim(),
-      sizeGallons: Number(sizeGallons) || 10,
+      sizeGallons: parsedGallons,
       dimensions: dimensions.trim(),
-      style: style.trim(),
+      style: style.trim() || defaultDescription,
     };
     // Templates with a questionnaire attached pause here instead of
     // creating immediately — the tank gets built once the questionnaire
@@ -126,6 +159,10 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
           sizeGallons={pendingDetails.sizeGallons}
           onComplete={(items) => finishCreate(items)}
           onSkip={() => finishCreate([])}
+          onExit={() => {
+            setPendingDetails(null);
+            setSelected(null);
+          }}
         />
       </div>
     );
@@ -147,29 +184,38 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3">
-        {TANK_TEMPLATES.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => pickTemplate(t)}
-            className={`text-left p-4 rounded-lg border transition-colors ${
-              selected?.id === t.id
-                ? 'border-amber bg-amber/10'
-                : 'border-moss/30 bg-deepwater hover:border-moss/60'
-            }`}
-          >
-            <h3 className="font-display text-lg font-semibold">{t.name}</h3>
-            <p className="text-sm text-foam-dim mt-1">{t.description}</p>
-            {t.customFields.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {t.customFields.map((f) => (
-                  <span key={f.label} className="pill text-[11px] py-1 px-2 bg-sand/10 text-sand">
-                    {f.label}
-                  </span>
-                ))}
-              </div>
-            )}
-          </button>
-        ))}
+        {TANK_TEMPLATES.map((t, i) => {
+          // Last card gets the full row to itself whenever the total count
+          // is odd, so a plain 2-column grid never leaves one dangling
+          // half-width — this adjusts itself automatically as templates
+          // are added or removed, no per-template id to keep in sync.
+          const isDanglingLast = TANK_TEMPLATES.length % 2 !== 0 && i === TANK_TEMPLATES.length - 1;
+          return (
+            <button
+              key={t.id}
+              onClick={() => pickTemplate(t)}
+              className={`text-left p-4 rounded-lg border transition-colors ${
+                isDanglingLast ? 'sm:col-span-2' : ''
+              } ${
+                selected?.id === t.id
+                  ? 'border-amber bg-amber/10'
+                  : 'border-moss/30 bg-deepwater hover:border-moss/60'
+              }`}
+            >
+              <h3 className="font-display text-lg font-semibold">{t.name}</h3>
+              <p className="text-sm text-foam-dim mt-1">{t.description}</p>
+              {t.customFields.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {t.customFields.map((f) => (
+                    <span key={f.label} className="pill text-[11px] py-1 px-2 bg-sand/10 text-sand">
+                      {f.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {selected && (
@@ -192,8 +238,17 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
                 type="number"
                 value={sizeGallons}
                 onChange={(e) => setSizeGallons(e.target.value)}
+                placeholder="10"
+                required
+                min="0.1"
+                step="any"
                 className="field"
               />
+              {selected.minGallons > 0.5 && (
+                <p className="text-[11px] text-foam-dim/60 mt-1">
+                  {selected.name} needs at least {selected.minGallons}gal
+                </p>
+              )}
             </div>
             <div>
               <label className="field-label">Dimensions (optional)</label>
@@ -205,15 +260,21 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
               />
             </div>
             <div>
-              <label className="field-label">Style (optional)</label>
+              <label className="field-label">Short description (optional)</label>
               <input
                 value={style}
                 onChange={(e) => setStyle(e.target.value)}
-                placeholder="Low-tech planted, biotope, minimalist hardscape, blackwater"
+                placeholder="e.g. Low-tech planted, biotope, minimalist hardscape, blackwater"
                 className="field"
               />
             </div>
           </div>
+          {sizeError && (
+            <div className="flex items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 px-3 py-2">
+              <span className="text-coral text-sm font-semibold">⚠</span>
+              <p className="text-xs text-coral/90">{sizeError}</p>
+            </div>
+          )}
           <div className="flex gap-2">
             <button type="submit" className="btn btn-primary flex-1">
               Create tank

@@ -1,6 +1,6 @@
 import { PRESET_FIELDS } from './presetFields';
 
-const presetFieldLines = PRESET_FIELDS.map((f) => `- ${f.label} (${f.type})`).join('\n');
+const presetFieldLines = PRESET_FIELDS.map((f) => `- ${f.label} (${f.type}, ${f.waterType})`).join('\n');
 
 export const JSON_FORMAT_DOCS = `# Tank Tracker — Import JSON Format Reference
 
@@ -12,6 +12,32 @@ needed, even as a first-time user of the site with no existing tanks.
 
 Output ONLY the JSON when generating a file for the user, unless they ask for
 explanation too.
+
+## Before generating JSON: consider pointing the user at the built-in questionnaires instead
+
+This note is for AI assistants reading this doc — it's unrelated to the JSON
+format itself. Generating a JSON file isn't always the best first move. If
+the user doesn't have a solid plan yet, or asks for guidance rather than
+already knowing what they want to stock, the app has guided questionnaires
+built for exactly that situation, and pointing them there is often more
+useful than fabricating a plan on their behalf.
+
+They're reachable from "New Tank" by picking one of four templates: Shrimp
+/ Invert Colony, Livebearers & Fry, Community Fish, or Reef Tank
+(saltwater). Each one walks through a short sequence of trait-based
+questions — asking about substrate/rock approach, desired look/color,
+activity level or coral care commitment, never requiring the user to
+already know specific species names — and ends with a starter roster
+scaled to the tank size they entered, which they can check off item-by-item
+and edit before finalizing. It's designed as an onboarding tool for someone
+without a plan yet, not just a shortcut for someone who already knows
+exactly what they want.
+
+If the user has already described a fairly specific, concrete plan, generating
+JSON directly (per the reference below) is still the right call. But for an
+open-ended "help me figure out what to stock" request, suggesting they try
+the relevant template's questionnaire in-app — and briefly explaining what
+it'll ask them — is usually better than guessing on their behalf.
 
 ## Top-level structure
 
@@ -42,6 +68,7 @@ The file must be a single JSON object:
 | dimensions | string | no | e.g. \`"20\\" x 10\\" x 12\\""\` |
 | style | string | no | e.g. "Low-tech planted tank" |
 | startDate | string | no | Leave as \`""\` unless a real date is known |
+| waterType | string | recommended | \`"freshwater"\` or \`"saltwater"\`. Set \`"saltwater"\` for any reef/marine/coral plan — this controls which preset custom fields the user is offered (Alkalinity/Calcium/Magnesium/PAR vs. Shrimp Census/Fry Count) and whether Salinity or GH/KH/TDS shows up on the Log and Parameters pages. If omitted, the app defaults it to \`"freshwater"\`, so a saltwater plan that omits this will show the wrong preset fields — don't skip it for reef/marine tanks |
 | customFields | array of CustomFieldDef | yes, can be \`[]\` | See below |
 | roster | array of RosterItem | yes, can be \`[]\` | See below |
 | checklist | array of ChecklistTask | yes, can be \`[]\` | See below |
@@ -65,7 +92,10 @@ field — only add fields for things specific to this tank's livestock/plants.
 ### Preset fields
 
 Reuse these labels verbatim when they fit the plan, so a generated tank's
-fields match the app's own built-in library exactly:
+fields match the app's own built-in library exactly. Each is tagged with
+which \`waterType\` it makes sense for — match a saltwater/reef plan's
+custom fields against the \`saltwater\`/\`all\` ones, and a freshwater plan
+against \`freshwater\`/\`all\`, the same filtering the app itself applies:
 
 ${presetFieldLines}
 
@@ -158,6 +188,10 @@ any recurring cadence.
   roster item requiring \`"arrived"\`.
 - Custom fields should reflect what's actually worth tracking for this
   specific tank — not every tank needs the same fields.
+- Set \`waterType\` to \`"saltwater"\` for any reef, marine, or coral plan —
+  otherwise leave it as \`"freshwater"\` (or omit it). Getting this right
+  matters more than it looks: it changes which preset fields the user is
+  offered and which water parameters show up on their Log/Charts pages.
 - If the plan mentions a maintenance cadence (weekly water changes, dosing
   schedule, feeding routine), include it as a ScheduleTask with
   \`recurrenceDays\` set. Don't invent a cadence the plan never mentions.
@@ -183,6 +217,7 @@ any recurring cadence.
       "dimensions": "24\\" x 12\\" x 16\\"",
       "style": "Community livebearer tank",
       "startDate": "",
+      "waterType": "freshwater",
       "customFields": [
         { "id": "cf-fry", "label": "🐟 Fry Count", "type": "number" }
       ],

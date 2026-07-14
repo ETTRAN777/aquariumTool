@@ -18,6 +18,9 @@ export default function Settings() {
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons.toString() ?? '');
   const [dimensions, setDimensions] = useState(activeTank?.dimensions ?? '');
   const [style, setStyle] = useState(activeTank?.style ?? '');
+  const [waterType, setWaterType] = useState<'freshwater' | 'saltwater'>(
+    activeTank?.waterType ?? 'freshwater'
+  );
 
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('number');
@@ -34,6 +37,7 @@ export default function Settings() {
       sizeGallons: Number(sizeGallons) || activeTank.sizeGallons,
       dimensions: dimensions.trim() || undefined,
       style: style.trim() || undefined,
+      waterType,
     });
   }
 
@@ -72,6 +76,14 @@ export default function Settings() {
 
   const existingLabels = new Set(activeTank.customFields.map((f) => f.label));
   const availablePresets = PRESET_FIELDS.filter((p) => !existingLabels.has(p.label));
+  const otherWaterType = activeTank.waterType === 'freshwater' ? 'saltwater' : 'freshwater';
+  // "all" presets ride along with the tank's own water type — they're
+  // relevant either way, and duplicating them into both groups would just
+  // be confusing rather than more useful.
+  const primaryPresets = availablePresets.filter(
+    (p) => p.waterType === activeTank.waterType || p.waterType === 'all'
+  );
+  const secondaryPresets = availablePresets.filter((p) => p.waterType === otherWaterType);
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -118,6 +130,21 @@ export default function Settings() {
             <label className="field-label">Style</label>
             <input value={style} onChange={(e) => setStyle(e.target.value)} className="field" />
           </div>
+        </div>
+        <div>
+          <label className="field-label">Water type</label>
+          <select
+            value={waterType}
+            onChange={(e) => setWaterType(e.target.value as 'freshwater' | 'saltwater')}
+            className="field sm:w-56"
+          >
+            <option value="freshwater">Freshwater</option>
+            <option value="saltwater">Saltwater</option>
+          </select>
+          <p className="text-[11px] text-foam-dim/60 mt-1">
+            Controls which preset tracking fields show up below, and whether salinity appears
+            on the Weekly Log and Parameters pages.
+          </p>
         </div>
         <button type="submit" className="btn btn-secondary">
           Save changes
@@ -171,17 +198,45 @@ export default function Settings() {
               {showPresets ? 'Hide presets' : `Add from preset (${availablePresets.length} available)`}
             </button>
             {showPresets && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {availablePresets.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => addPresetField(p.label, p.type)}
-                    className="pill text-xs py-1.5 px-3 bg-sand/10 text-sand border border-sand/20 hover:bg-sand/20 transition-colors"
-                  >
-                    + {p.label}
-                  </button>
-                ))}
+              <div className="mt-2 space-y-2.5">
+                {primaryPresets.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-foam-dim/60 uppercase tracking-wide mb-1">
+                      {activeTank.waterType === 'freshwater' ? 'Freshwater' : 'Saltwater'} presets
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {primaryPresets.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => addPresetField(p.label, p.type)}
+                          className="pill text-xs py-1.5 px-3 bg-sand/10 text-sand border border-sand/20 hover:bg-sand/20 transition-colors"
+                        >
+                          + {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {secondaryPresets.length > 0 && (
+                  <div className="pt-2 border-t border-moss/10">
+                    <p className="text-[10px] text-foam-dim/60 uppercase tracking-wide mb-1">
+                      {otherWaterType === 'freshwater' ? 'Freshwater' : 'Saltwater'} presets
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {secondaryPresets.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => addPresetField(p.label, p.type)}
+                          className="pill text-xs py-1.5 px-3 bg-sand/10 text-sand border border-sand/20 hover:bg-sand/20 transition-colors"
+                        >
+                          + {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

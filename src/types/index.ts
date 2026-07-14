@@ -36,6 +36,7 @@ export interface WaterParams {
   ammonia?: number;
   nitrite?: number;
   nitrate?: number;
+  salinity?: number; // specific gravity (e.g. 1.025) — saltwater tanks only
 }
 
 export type CustomFieldType = 'number' | 'text' | 'boolean';
@@ -90,6 +91,13 @@ export interface Tank {
   dimensions?: string;
   style?: string;
   startDate?: string;
+  // Drives which preset custom fields are offered (Settings) and whether
+  // salinity shows up on the Log/Charts pages — a freshwater tank has no
+  // use for a salinity reading, and a saltwater tank has no use for the
+  // freshwater-only presets (shrimp census, fry count, etc). Defaults to
+  // 'freshwater' for any tank predating this field (see storage.ts) since
+  // that's all this app supported until now.
+  waterType: 'freshwater' | 'saltwater';
   customFields: CustomFieldDef[];
   roster: RosterItem[];
   checklist: ChecklistTask[];
@@ -144,6 +152,11 @@ export interface RecommendedRosterItem {
   cost?: number;
   quantity?: number;
   defaultSelected: boolean;
+  // A short, prominent flag (e.g. "Tank is smaller than this fish's real
+  // minimum") — rendered as a standalone pill in the questionnaire UI,
+  // separate from `detail`'s muted explanatory paragraph. Reserved for
+  // things the person should not be able to miss by skimming.
+  warning?: string;
 }
 
 export interface AppData {

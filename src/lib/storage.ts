@@ -50,6 +50,7 @@ function normalizeTank(raw: any): Tank {
     checklist: Array.isArray(raw.checklist) ? raw.checklist : [],
     logs,
     schedule: Array.isArray(raw.schedule) ? raw.schedule : [],
+    waterType: raw.waterType === 'saltwater' ? 'saltwater' : 'freshwater',
   };
 }
 
