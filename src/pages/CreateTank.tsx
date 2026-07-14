@@ -179,9 +179,29 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         </h1>
         <p className="text-foam-dim mt-2">
           Start from a template to pre-fill useful tracking fields, start blank and build it
-          your own way, or import a tank from a backup file — all one click.
+          your own way, or hand your build plan to an AI assistant and import what it generates
+          — all one click.
         </p>
       </div>
+
+      <Link
+        to="/docs"
+        className="block card border-amber/40 hover:border-amber/70 hover:bg-amber/5 transition-colors p-4"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] text-amber uppercase tracking-widest mb-1">
+              Have a build plan already?
+            </p>
+            <p className="text-sm text-foam">
+              Paste our JSON format reference into an AI assistant along with your own plan,
+              however detailed — it can generate a file you import directly below, no template
+              or questionnaire needed.
+            </p>
+          </div>
+          <span className="text-amber text-sm font-medium shrink-0">View docs →</span>
+        </div>
+      </Link>
 
       <div className="grid sm:grid-cols-2 gap-3">
         {TANK_TEMPLATES.map((t, i) => {
@@ -298,16 +318,9 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         <div>
           <p className="field-label">Import a tank from a backup file</p>
           <p className="text-xs text-foam-dim">
-            Bring in a tank from another device or an older backup — new tanks land
+            Bring in a tank from another device, an older backup, or even AI — new tanks land
             alongside whatever you already have. If a tank matches one you've already got,
             you'll be offered a choice instead of ending up with a duplicate.
-          </p>
-          <p className="text-xs text-foam-dim mt-2">
-            Don't have a file yet? An AI assistant can generate one from your own build
-            plan —{' '}
-            <Link to="/docs" className="text-amber hover:underline">
-              see the JSON format docs →
-            </Link>
           </p>
         </div>
         <input

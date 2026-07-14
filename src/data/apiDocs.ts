@@ -22,22 +22,141 @@ already knowing what they want to stock, the app has guided questionnaires
 built for exactly that situation, and pointing them there is often more
 useful than fabricating a plan on their behalf.
 
-They're reachable from "New Tank" by picking one of four templates: Shrimp
-/ Invert Colony, Livebearers & Fry, Community Fish, or Reef Tank
-(saltwater). Each one walks through a short sequence of trait-based
-questions — asking about substrate/rock approach, desired look/color,
-activity level or coral care commitment, never requiring the user to
-already know specific species names — and ends with a starter roster
-scaled to the tank size they entered, which they can check off item-by-item
-and edit before finalizing. It's designed as an onboarding tool for someone
-without a plan yet, not just a shortcut for someone who already knows
-exactly what they want.
+They're reachable from "New Tank" by picking one of seven templates — every
+one of them now has a guided questionnaire except Blank: Shrimp / Invert
+Colony, Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
+Planted-Only, and Reef Tank (saltwater; the other five are freshwater).
+Each walks through a short sequence of trait-based questions — substrate or
+live-rock approach, desired look/color/personality, activity level or care
+commitment — never requiring the user to already know specific species
+names, and ends with a starter roster scaled to the tank size they entered.
+Reef's questionnaire is intentionally shorter than the others (rock choice
+→ coral care tier → fish inclusion) rather than matching their full depth.
+
+Two safety behaviors worth knowing about before generating JSON by hand
+instead of pointing someone to the questionnaire:
+
+- **Every template has a hard minimum tank size**, checked and rejected
+  *before* tank creation — e.g. a Reef Tank can't be created under 10
+  gallons at all, regardless of questionnaire answers. If a user's stated
+  size doesn't clear the relevant template's floor, generating a JSON plan
+  for it anyway would produce something the app's own questionnaire would
+  refuse to build.
+- **Individual species within a template can still be undersized even when
+  the template's own floor is cleared** (e.g. Solo Fish allows a 2.5-gallon
+  tank because a Betta fits there, but an Oscar chosen from that same
+  template needs 55 gallons). The questionnaire surfaces this as a
+  prominent warning pill on the specific item rather than silently
+  swapping in a different species or hiding the mismatch — worth mirroring
+  if generating a roster by hand for a plan that mentions a fish clearly
+  too large for the stated tank.
 
 If the user has already described a fairly specific, concrete plan, generating
 JSON directly (per the reference below) is still the right call. But for an
 open-ended "help me figure out what to stock" request, suggesting they try
 the relevant template's questionnaire in-app — and briefly explaining what
 it'll ask them — is usually better than guessing on their behalf.
+
+## First, check whether this is a new user
+
+Also unrelated to the JSON format itself, and worth doing before anything
+else in this doc: if it isn't already clear from context, ask whether the
+person is new to the site or has used it before. Someone who's never seen
+the app has no way to know what's even possible here — a stocking plan or
+a JSON file answers the question they asked, but not the questions they
+don't know to ask yet. For a first-time user, walk through what the site
+actually does before or alongside generating anything, using the feature
+list below. For a returning user, skip this — don't re-explain a tool
+they already know.
+
+### Site feature list
+
+**Getting started**
+- No account, no sign-up, fully client-side — everything lives in the
+  browser's local storage. Nothing is sent to a server.
+- Multiple tanks per person, switchable from a dropdown in the header.
+- A new tank starts from one of seven templates: Shrimp / Invert Colony,
+  Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
+  Planted-Only, Reef Tank (saltwater), or Blank. Six of the seven include
+  a guided questionnaire (see above) that produces a starter roster
+  scaled to the tank's size — Blank starts empty by design.
+- Tanks can also be created by importing a JSON backup file (this
+  document describes that format) instead of starting from a template.
+
+**Dashboard**
+- Landing page for the active tank: quick stats (roster count, checklist
+  progress, days since last log entry, upcoming/overdue schedule items)
+  and shortcuts into the other pages.
+
+**Roster**
+- Every physical thing going into the tank — livestock, plants,
+  hardscape, substrate, equipment — tracked through a sourcing pipeline:
+  idea → wishlist → ordered → arrived → acclimating → established.
+- Cost tracking per item, with a running total that only counts items
+  still at "wishlist" or later (an "idea" doesn't count toward the
+  budget, since it's explicitly undecided).
+
+**Build Checklist**
+- Ordered setup steps with two kinds of dependencies: \`dependsOn\` (this
+  step can't be checked off until another step is) and \`rosterLinks\`
+  (this step can't be checked off until a specific roster item reaches a
+  given status, e.g. "arrived").
+- When a questionnaire produces a roster, the checklist automatically
+  gets one "Source X" step per item, each gated on that item reaching
+  "arrived" — not hand-written, generated from the actual roster.
+
+**Weekly Log**
+- A running journal: free-text entries with an optional title, mood
+  rating (thriving / stable / watching / concerned — itself trackable
+  over time as a chart), water parameter readings, custom field values,
+  and photos.
+- Water parameters shown depend on the tank's water type: freshwater
+  tanks get temp/pH/GH/KH/TDS/ammonia/nitrite/nitrate; saltwater tanks
+  swap GH/KH/TDS for Salinity (specific gravity).
+- Log entries can link back to Schedule tasks completed that same day
+  (see below) — that linkage is automatic in both directions, whichever
+  gets created first.
+
+**Schedule**
+- Recurring (e.g. "water change every 7 days") or one-off maintenance
+  reminders, shown in a real month calendar view alongside an agenda list
+  for the selected day.
+- Recurring tasks can have an optional end date, after which the series
+  retires itself instead of repeating forever.
+- Completing a task on a day that already has a Weekly Log entry
+  automatically links the two — the log entry shows what maintenance
+  happened that day, without creating a redundant record.
+
+**Parameters (charts)**
+- Every numeric water parameter and every numeric/boolean custom field
+  charts itself automatically over time from Weekly Log entries — no
+  separate chart-configuration step.
+- Mood is charted on the same concerned→thriving scale used in the Log.
+- Boolean custom fields only get their own chart once they've actually
+  been "Yes" at least once — a field that's always been "No" has nothing
+  to show.
+
+**Custom tracking fields**
+- Every tank has a definable set of extra fields (number/text/boolean)
+  shown on every Log entry — e.g. shrimp census, fry count, fin
+  condition, alkalinity.
+- A preset library of common fields can be added with one click from
+  Settings, filtered and grouped by the tank's own water type (with
+  water-type-agnostic presets like "Signs Of Illness" always available)
+  — or a fully custom field can be defined from scratch.
+
+**Settings**
+- Rename the tank, adjust size/dimensions/short description, and change
+  its water type (freshwater/saltwater) after creation.
+- Manage custom fields (add, remove, add from preset).
+- Delete the tank entirely (irreversible without a prior backup export).
+
+**Backup / Import (this document's subject)**
+- Export the current data as a JSON file at any time.
+- Import a JSON file — either a real prior backup, or one generated by an
+  AI assistant following this reference — to add tanks without
+  overwriting anything already present. Smart deduplication offers
+  "replace" vs "keep both" when an imported tank matches an existing one.
 
 ## Top-level structure
 
