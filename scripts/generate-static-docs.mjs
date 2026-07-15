@@ -16,11 +16,17 @@
 // exported constant rather than duplicating the text by hand, so the two
 // can never drift out of sync with each other.
 //
-// Uses tsc directly rather than esbuild — this project's Vite setup uses
-// the Rolldown bundler, so esbuild isn't actually a dependency here even
-// though many Vite projects have it transitively.
-import { execSync } from 'child_process';
-import { mkdtempSync, copyFileSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
+// Uses TypeScript's own transpileModule() API directly, not a shelled-out
+// `npx tsc` — running tsc from an isolated temp directory (needed so Node
+// can import the result as a real file) has no local node_modules to
+// resolve against, and on a machine that's never run it before, `npx tsc`
+// can resolve to a completely unrelated, deprecated npm package literally
+// named "tsc" instead of the TypeScript compiler. transpileModule() avoids
+// the whole problem — it's a plain function call against this project's
+// own `typescript` dependency, no subprocess, no PATH resolution, no
+// platform-specific npx behavior.
+import ts from 'typescript';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,29 +34,33 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
+function transpile(filePath) {
+  const source = readFileSync(filePath, 'utf-8');
+  const result = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+    reportDiagnostics: false,
+  });
+  return result.outputText;
+}
+
 const tempDir = mkdtempSync(path.join(tmpdir(), 'gen-docs-'));
 try {
-  copyFileSync(path.join(projectRoot, 'src/data/apiDocs.ts'), path.join(tempDir, 'apiDocs.ts'));
-  copyFileSync(path.join(projectRoot, 'src/data/presetFields.ts'), path.join(tempDir, 'presetFields.ts'));
-  copyFileSync(path.join(projectRoot, 'src/types/index.ts'), path.join(tempDir, 'types.ts'));
+  const presetFieldsJs = transpile(path.join(projectRoot, 'src/data/presetFields.ts'));
+  const apiDocsJs = transpile(path.join(projectRoot, 'src/data/apiDocs.ts'));
 
-  // Flattened into one directory, so the relative import needs adjusting
-  // to match (was '../types' two levels up in the real project structure).
-  let presetFieldsSrc = readFileSync(path.join(tempDir, 'presetFields.ts'), 'utf-8');
-  presetFieldsSrc = presetFieldsSrc.replace("from '../types'", "from './types'");
-  writeFileSync(path.join(tempDir, 'presetFields.ts'), presetFieldsSrc);
-
-  execSync(
-    `npx tsc --module esnext --target es2022 --outDir out --skipLibCheck --moduleResolution bundler apiDocs.ts presetFields.ts types.ts`,
-    { cwd: tempDir, stdio: 'pipe' }
+  writeFileSync(path.join(tempDir, 'presetFields.js'), presetFieldsJs);
+  // transpileModule() strips TS syntax but leaves import specifiers
+  // untouched — Node's ESM resolver needs the explicit .js extension on
+  // relative imports that tsc's own bundled emit would normally add.
+  writeFileSync(
+    path.join(tempDir, 'apiDocs.js'),
+    apiDocsJs.replace("from './presetFields';", "from './presetFields.js';")
   );
 
-  const outDir = path.join(tempDir, 'out');
-  let apiDocsJs = readFileSync(path.join(outDir, 'apiDocs.js'), 'utf-8');
-  apiDocsJs = apiDocsJs.replace("from './presetFields';", "from './presetFields.js';");
-  writeFileSync(path.join(outDir, 'apiDocs.js'), apiDocsJs);
-
-  const modulePath = path.join(outDir, 'apiDocs.js');
+  const modulePath = path.join(tempDir, 'apiDocs.js');
   const { JSON_FORMAT_DOCS } = await import(`file://${modulePath}?t=${Date.now()}`);
 
   const publicDir = path.join(projectRoot, 'public');
