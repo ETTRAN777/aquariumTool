@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { PRESET_FIELDS } from '../data/presetFields';
 import type { CustomFieldDef, CustomFieldType } from '../types';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
 
 const TYPE_LABELS: Record<CustomFieldType, string> = {
   number: 'Number',
@@ -31,11 +32,12 @@ export default function Settings() {
   function saveTankInfo(e: React.FormEvent) {
     e.preventDefault();
     if (!activeTank || !name.trim()) return;
+    const resolvedGallons = Number(sizeGallons) || activeTank.sizeGallons;
     updateTank({
       ...activeTank,
       name: name.trim(),
-      sizeGallons: Number(sizeGallons) || activeTank.sizeGallons,
-      dimensions: dimensions.trim() || undefined,
+      sizeGallons: resolvedGallons,
+      dimensions: dimensions.trim() || closestStandardDimensions(resolvedGallons),
       style: style.trim() || undefined,
       waterType,
     });
@@ -107,7 +109,13 @@ export default function Settings() {
           className="field font-medium"
           placeholder="Tank name"
           required
+          maxLength={NAME_MAX_LENGTH}
         />
+        {name.length === NAME_MAX_LENGTH && (
+          <p className="text-[11px] text-coral font-medium">
+            ⚠ Tank names can't exceed {NAME_MAX_LENGTH} characters.
+          </p>
+        )}
         <div className="grid sm:grid-cols-3 gap-3">
           <div>
             <label className="field-label">Size (gallons)</label>
@@ -127,8 +135,18 @@ export default function Settings() {
             />
           </div>
           <div>
-            <label className="field-label">Style</label>
-            <input value={style} onChange={(e) => setStyle(e.target.value)} className="field" />
+            <label className="field-label">Short description</label>
+            <input
+              value={style}
+              onChange={(e) => setStyle(e.target.value)}
+              className="field"
+              maxLength={STYLE_MAX_LENGTH}
+            />
+            {style.length === STYLE_MAX_LENGTH && (
+              <p className="text-[11px] text-coral font-medium mt-1">
+                ⚠ Short descriptions can't exceed {STYLE_MAX_LENGTH} characters.
+              </p>
+            )}
           </div>
         </div>
         <div>

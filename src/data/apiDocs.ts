@@ -220,7 +220,7 @@ The file must be a single JSON object:
 | roster | array of RosterItem | yes, can be \`[]\` | See below |
 | checklist | array of ChecklistTask | yes, can be \`[]\` | See below |
 | logs | array | yes | Always output as \`[]\` — log entries are written by the user later, never generated |
-| schedule | array of ScheduleTask | no, can be \`[]\` or omitted | See below. Only include if the plan mentions a recurring cadence (e.g. "weekly water changes") or a specific one-off date |
+| schedule | array of ScheduleTask | no, can be \`[]\` or omitted | See below — including when/how to handle a requested schedule with no stated cadence |
 
 ## CustomFieldDef
 
@@ -310,6 +310,26 @@ A maintenance reminder — recurring (e.g. weekly water changes) or a one-off
 date. Optional; omit entirely, or output \`[]\`, if the plan doesn't mention
 any recurring cadence.
 
+**Not the same thing as the checklist, even though both support a due
+date.** Checklist is one-time build-phase steps (source equipment, build
+hardscape, cycle, stock) — that sequence belongs in \`checklist\`, using its
+own \`dueDate\` field if specific dates are known, never duplicated into
+\`schedule\` as one-off entries. Schedule is for what happens *after* the
+build: ongoing maintenance that recurs, or a genuine one-off future
+reminder unrelated to setup (e.g. "revisit stocking decision in 3
+months"). If every \`schedule\` entry you're about to write is really just
+a restated build step with a date attached, that content belongs in
+\`checklist\` instead — an empty \`schedule: []\` is correct and expected
+for a plan that never mentions any maintenance cadence.
+
+If the user has asked for a schedule but the plan doesn't state a
+maintenance cadence, don't resolve that by inventing one *or* by
+repurposing checklist steps as schedule entries — ask, the same way you'd
+ask about an incomplete stocking list. A reasonable version: *"I can add a
+maintenance schedule, but you haven't mentioned how often — want a
+standard cadence (weekly water change, etc.) as a starting point, or do
+you have specific intervals in mind?"*
+
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | id | string | yes | unique within this tank |
@@ -341,10 +361,13 @@ any recurring cadence.
   offered and which water parameters show up on their Log/Charts pages.
 - If the plan mentions a maintenance cadence (weekly water changes, dosing
   schedule, feeding routine), include it as a ScheduleTask with
-  \`recurrenceDays\` set. Don't invent a cadence the plan never mentions.
-  If the plan gives that cadence a clear end point (e.g. "weekly for the
-  first month, then normal maintenance"), set \`endDate\` accordingly —
-  otherwise leave it out so the reminder just repeats indefinitely.
+  \`recurrenceDays\` set. Don't invent a cadence the plan never mentions —
+  and don't fill an empty schedule by repurposing checklist build steps as
+  one-off entries instead; see the note under ScheduleTask above. If the
+  plan gives that cadence a clear end point (e.g. "weekly for the first
+  month, then normal maintenance"), set \`endDate\` accordingly — otherwise
+  leave it out so the reminder just repeats indefinitely.
+
 - If part of the plan is an open/undecided item (e.g. "still deciding on a
   centerpiece fish"), include it as a roster item with \`status: "idea"\`
   and a detail note explaining what's undecided — its cost won't count

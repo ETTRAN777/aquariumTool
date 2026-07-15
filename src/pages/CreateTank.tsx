@@ -5,6 +5,7 @@ import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../dat
 import { importData, tankContentKey } from '../lib/storage';
 import TankQuestionnaire from '../components/TankQuestionnaire';
 import type { Tank, RecommendedRosterItem } from '../types';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
 
 interface PendingTankDetails {
   name: string;
@@ -76,7 +77,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     const details: PendingTankDetails = {
       name: name.trim(),
       sizeGallons: parsedGallons,
-      dimensions: dimensions.trim(),
+      dimensions: dimensions.trim() || closestStandardDimensions(parsedGallons),
       style: style.trim() || defaultDescription,
     };
     // Templates with a questionnaire attached pause here instead of
@@ -250,7 +251,13 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
             className="field font-medium"
             required
             autoFocus
+            maxLength={NAME_MAX_LENGTH}
           />
+          {name.length === NAME_MAX_LENGTH && (
+            <p className="text-[11px] text-coral font-medium">
+              ⚠ Tank names can't exceed {NAME_MAX_LENGTH} characters.
+            </p>
+          )}
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
               <label className="field-label">Size (gallons)</label>
@@ -275,9 +282,12 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
               <input
                 value={dimensions}
                 onChange={(e) => setDimensions(e.target.value)}
-                placeholder='20" x 10" x 12"'
+                placeholder={closestStandardDimensions(Number(sizeGallons) || 10)}
                 className="field"
               />
+              <p className="text-[11px] text-foam-dim/60 mt-1">
+                Autofills with approximation if blank
+              </p>
             </div>
             <div>
               <label className="field-label">Short description (optional)</label>
@@ -286,7 +296,13 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
                 onChange={(e) => setStyle(e.target.value)}
                 placeholder="e.g. Low-tech planted, biotope, minimalist hardscape, blackwater"
                 className="field"
+                maxLength={STYLE_MAX_LENGTH}
               />
+              {style.length === STYLE_MAX_LENGTH && (
+                <p className="text-[11px] text-coral font-medium mt-1">
+                  ⚠ Short descriptions can't exceed {STYLE_MAX_LENGTH} characters.
+                </p>
+              )}
             </div>
           </div>
           {sizeError && (
@@ -318,7 +334,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
         <div>
           <p className="field-label">Import a tank from a backup file</p>
           <p className="text-xs text-foam-dim">
-            Bring in a tank from another device, an older backup, or even AI — new tanks land
+            Bring in a tank from another device or an older backup — new tanks land
             alongside whatever you already have. If a tank matches one you've already got,
             you'll be offered a choice instead of ending up with a duplicate.
           </p>

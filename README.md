@@ -92,6 +92,28 @@ between users — each deployment is its own private instance.
 - Tailwind CSS v4
 - Vite
 
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+## Deploying to GitHub Pages
+
+1. Update `base` in `vite.config.ts` if your repo name differs from
+   `aquariumTool`.
+2. Push this repo to GitHub.
+3. Run:
+
+   ```bash
+   npm run deploy
+   ```
+
+   This builds the site and pushes `dist/` to a `gh-pages` branch via the
+   `gh-pages` package.
+4. In your repo settings → Pages, set the source to the `gh-pages` branch.
+
 ## Data & backups
 
 Everything is stored in `localStorage` under one key. Use the **Export**
