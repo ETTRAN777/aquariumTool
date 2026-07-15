@@ -286,7 +286,8 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
                 className="field"
               />
               <p className="text-[11px] text-foam-dim/60 mt-1">
-                Autofills with approximation if blank
+                Left blank, this fills in from the closest standard size for whatever gallons you
+                entered.
               </p>
             </div>
             <div>

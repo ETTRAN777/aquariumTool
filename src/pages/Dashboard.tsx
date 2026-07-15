@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { todayIso } from '../lib/date';
+import { MOOD_LABELS } from '../lib/constants';
+import type { CustomFieldValue } from '../types';
 
 export default function Dashboard() {
   const { activeTank } = useData();
@@ -28,14 +30,36 @@ export default function Dashboard() {
   const today = todayIso();
   const dueCount = schedule.filter((t) => !t.done && t.dueDate <= today).length;
 
-  // Show whatever the tank's first numeric custom field is tracking — shrimp
-  // count, fry count, fish count, whatever this tank was set up to watch.
-  const primaryField = customFields.find((f) => f.type === 'number');
-  const latestPrimaryValue = primaryField
-    ? logs.find((l) => l.customValues?.[primaryField.id] !== undefined)?.customValues?.[
-        primaryField.id
-      ]
-    : undefined;
+  // Mood leads the tracked-fields row regardless of field type or order —
+  // it's the one thing tracked on every tank by design, so it gets a fixed
+  // top slot rather than competing with custom fields for placement.
+  const latestMoodEntry = logs.find((l) => l.mood !== undefined);
+  const moodCard = latestMoodEntry?.mood
+    ? { key: 'mood', label: 'Mood', value: MOOD_LABELS[latestMoodEntry.mood] }
+    : null;
+
+  // Numbers first — a number reads as an actual stat at a glance, while a
+  // boolean/text value needs the label to make sense of it, so they're
+  // pushed to the back rather than crowding out the more useful numeric
+  // fields once there are more than a handful being tracked. Capped so the
+  // row (mood + custom fields) never exceeds 8 cards total.
+  const typeRank: Record<string, number> = { number: 0, boolean: 1, text: 2 };
+  const sortedCustomFields = [...customFields].sort((a, b) => typeRank[a.type] - typeRank[b.type]);
+  const remainingSlots = moodCard ? 7 : 8;
+  const customFieldCards = sortedCustomFields.slice(0, remainingSlots).map((f) => {
+    const entryWithValue = logs.find((l) => l.customValues?.[f.id] !== undefined);
+    const raw: CustomFieldValue | undefined = entryWithValue?.customValues?.[f.id];
+    let value: string;
+    if (raw === undefined) value = '—';
+    else if (f.type === 'boolean') value = raw ? 'Yes' : 'No';
+    else {
+      const str = String(raw);
+      value = str.length > 20 ? str.slice(0, 20) + '…' : str;
+    }
+    return { key: f.id, label: f.label, value };
+  });
+
+  const trackedFieldCards = moodCard ? [moodCard, ...customFieldCards] : customFieldCards;
 
   return (
     <div className="max-w-5xl mx-auto space-y-10">
@@ -80,14 +104,21 @@ export default function Dashboard() {
         />
         <StatCard label="Log entries" value={logs.length} link="/log" />
         <StatCard label="Due / overdue" value={dueCount} link="/schedule" />
-        {primaryField && (
-          <StatCard
-            label={primaryField.label}
-            value={latestPrimaryValue !== undefined ? String(latestPrimaryValue) : '—'}
-            link="/log"
-          />
-        )}
       </section>
+
+      {/* Tracked fields — mood first, then custom fields (numbers prioritized) */}
+      {trackedFieldCards.length > 0 && (
+        <section>
+          <p className="font-mono text-xs tracking-widest text-amber uppercase mb-3">
+            Tracked fields
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {trackedFieldCards.map((f) => (
+              <StatCard key={f.key} label={f.label} value={f.value} link="/log" />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Latest log preview */}
       <section>

@@ -56,8 +56,8 @@ export function moodToScore(mood: Mood | undefined): number | undefined {
 // the whole header and push the nav around if left unbounded, rather than
 // gracefully truncating. Shared between CreateTank and Settings so the
 // two entry points can never drift out of sync with each other.
-export const NAME_MAX_LENGTH = 22;
-export const STYLE_MAX_LENGTH = 80;
+export const NAME_MAX_LENGTH = 50;
+export const STYLE_MAX_LENGTH = 90;
 
 // Standard US retail tank dimensions by gallon size, used to auto-fill
 // Dimensions when the user leaves it blank. Sorted ascending so the
