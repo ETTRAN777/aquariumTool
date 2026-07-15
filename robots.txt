@@ -1,0 +1,85 @@
+# Policy: open to search engines and AI assistants/search crawlers.
+# AI *training* crawlers specifically blocked — this opts the site's
+# content out of future foundation-model training runs without affecting
+# search visibility or live AI-assistant access, which use separate,
+# distinct user-agents (allowed below).
+#
+# This landscape shifts — worth a periodic recheck (quarterly is the
+# commonly cited cadence) against each vendor's current published bot docs.
+# Last reviewed: 2026-07.
+
+# General crawlers — allowed by default (search engines, everything
+# not explicitly listed below).
+User-agent: *
+Disallow:
+
+# --- AI training crawlers: blocked ---
+# These collect content to build model training datasets. Blocking them
+# is a training opt-out; it does not remove the site from search or from
+# AI-generated answers — those go through the separate bots allowed further
+# down.
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+# Opts out of Gemini/Bard training specifically — does not affect regular
+# Google Search indexing/ranking, which uses plain Googlebot.
+User-agent: Google-Extended
+Disallow: /
+
+# Opts out of Apple's AI training specifically — does not affect regular
+# Applebot (Siri/Spotlight search).
+User-agent: Applebot-Extended
+Disallow: /
+
+# Common Crawl — its dataset feeds many third-party/open-source model
+# training pipelines beyond any single lab.
+User-agent: CCBot
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+User-agent: Omgili
+Disallow: /
+
+# ByteDance's crawler — has a documented history of not reliably honoring
+# robots.txt. Listed anyway as a first line of defense/stated intent, but
+# don't rely on this alone if it ever becomes a real problem (would need
+# server/CDN-level blocking instead).
+User-agent: Bytespider
+Disallow: /
+
+# --- AI search/retrieval + live user-triggered assistant fetches: explicitly allowed ---
+# Distinct from the training crawlers above — these power AI-generated
+# answers/citations and on-demand page reads when a person asks an
+# assistant to look at this site directly. Explicit Allow entries here so
+# the policy doesn't depend on how any given crawler treats an "unlisted"
+# default.
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
