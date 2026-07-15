@@ -5,10 +5,91 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tank Tracker — Plan & Log</title>
-    <meta name="description" content="A planning and documentation platform for freshwater aquariums — any tank, any livestock." />
+    <meta
+      name="description"
+      content="A free, local-first planning and tracking tool for freshwater and saltwater/reef aquariums — build checklists, weekly logs, maintenance schedules, and auto-charted parameters, with guided stocking questionnaires for shrimp, livebearer, community, solo-fish, planted, and reef tanks. No account required."
+    />
+
+    <!--
+      Structured data + the noscript block below exist for the same
+      reason: this is a client-rendered SPA, so a plain fetch (no JS
+      execution — search crawlers, AI fetch tools, curl, etc.) only ever
+      sees this <head> and whatever's in <body> before React mounts.
+      Without these, that kind of fetch gets nothing but the title above.
+      Keeping a real, standalone summary here means a single fetch of "/"
+      gives a genuine overview of what the site does even if the reader
+      never finds /docs specifically.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Tank Tracker",
+        "url": "https://ettran777.github.io/aquariumTool/",
+        "description": "A free, local-first planning and tracking tool for freshwater and saltwater/reef aquariums. No account or server — all data stays in the browser.",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Any (web browser)",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "featureList": [
+          "Seven tank templates (Shrimp/Invert, Livebearers & Fry, Community Fish, Solo Fish/Centerpiece, Planted-Only, Reef Tank, Blank), six with a guided stocking questionnaire",
+          "Roster tracking through a sourcing pipeline: idea, wishlist, ordered, arrived, acclimating, established",
+          "Build checklist with step dependencies and roster-status gating, auto-generated from questionnaire results",
+          "Weekly log with mood rating, water parameters, custom fields, and photos",
+          "Maintenance schedule with recurring and one-off reminders in a real calendar view, auto-linked to log entries",
+          "Auto-charted parameters and custom fields from log history",
+          "Freshwater and saltwater/reef support with water-type-aware presets and parameters",
+          "JSON import/export for backups and AI-assisted plan generation (see /docs)"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main style="max-width: 640px; margin: 3rem auto; padding: 0 1.5rem; font-family: sans-serif; line-height: 1.6;">
+        <h1>Tank Tracker — Plan &amp; Log</h1>
+        <p>
+          A free, local-first planning and tracking tool for freshwater and
+          saltwater/reef aquariums. No account, no server — all data stays
+          in your browser. This page requires JavaScript to run; here's a
+          summary of what it does for anyone (or anything) reading without
+          it.
+        </p>
+
+        <h2>Getting started</h2>
+        <p>
+          A new tank starts from one of seven templates — Shrimp / Invert
+          Colony, Livebearers &amp; Fry, Community Fish, Solo Fish /
+          Centerpiece, Planted-Only, Reef Tank (saltwater), or Blank. Six of
+          the seven include a guided questionnaire that asks trait-based
+          questions (never requiring the user to already know species
+          names) and produces a starter roster scaled to the tank's size.
+          Tanks can also be created by importing a JSON backup — see
+          <a href="./docs">/docs</a> for the full format reference, including
+          guidance for generating one with an AI assistant.
+        </p>
+
+        <h2>What's tracked, per tank</h2>
+        <ul>
+          <li><strong>Roster</strong> — every physical thing going into the tank, moved through idea &rarr; wishlist &rarr; ordered &rarr; arrived &rarr; acclimating &rarr; established, with cost tracking.</li>
+          <li><strong>Build checklist</strong> — ordered setup steps that can depend on other steps or on a roster item reaching a given status.</li>
+          <li><strong>Weekly log</strong> — free-text entries with mood rating, water parameters, custom field values, and photos.</li>
+          <li><strong>Schedule</strong> — recurring or one-off maintenance reminders in a calendar view, automatically linked to the day's log entry when one exists.</li>
+          <li><strong>Parameters</strong> — every numeric water parameter and custom field charts itself automatically from log history.</li>
+          <li><strong>Custom fields</strong> — definable per tank (number/text/boolean), with a preset library filtered by whether the tank is freshwater or saltwater.</li>
+        </ul>
+
+        <p>
+          Full JSON import/export format, including guidance for AI
+          assistants generating a plan on a user's behalf, is documented at
+          <a href="./docs">/docs</a>.
+        </p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,16 @@
+# Tank Tracker
+
+> A free, local-first aquarium planning and tracking tool. No account, no
+> server — all data stays in the browser. Supports freshwater and
+> saltwater/reef tanks across seven build templates, six of which include
+> a guided stocking questionnaire. Roster, build checklist, weekly log,
+> maintenance schedule, and parameter charts are all generated from the
+> same underlying tank data.
+
+## For AI assistants
+
+- [JSON Import Format Reference](https://ettran777.github.io/aquariumTool/docs): The authoritative reference for generating an importable tank plan as a JSON file — full schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf.
+
+## Site
+
+- [App](https://ettran777.github.io/aquariumTool/): The live application.
