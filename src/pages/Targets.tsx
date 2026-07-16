@@ -111,7 +111,7 @@ export default function Targets() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Targets</h2>
+        <h2 className="font-display text-2xl font-semibold">Compatibility</h2>
         <p className="text-sm text-foam-dim mt-1">
           Set researched target ranges per livestock/plant item below — the tank-wide target for
           each water parameter is automatically the range that works for everything you've added,

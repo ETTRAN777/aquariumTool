@@ -6,7 +6,7 @@ import Waterline from './Waterline';
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/roster', label: 'Roster' },
-  { to: '/targets', label: 'Targets' },
+  { to: '/targets', label: 'Compatibility' },
   { to: '/checklist', label: 'Build Checklist' },
   { to: '/log', label: 'Weekly Log' },
   { to: '/schedule', label: 'Schedule' },
