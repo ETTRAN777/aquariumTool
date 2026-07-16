@@ -120,6 +120,35 @@ they already know.
   still at "wishlist" or later (an "idea" doesn't count toward the
   budget, since it's explicitly undecided).
 
+**Targets**
+- Per livestock/plant roster item: optional researched water-parameter
+  target ranges, plus dedicated Mouth Size (mm) and Adult Size (in)
+  fields for livestock, plus free-form traits (temperament, fin-nipper,
+  light needs, growth rate, etc. — presets offered, or fully custom).
+- The tank-wide target for each water parameter is computed automatically
+  as the intersection of every item's own range — the tightest min and
+  the tightest max across everything in the roster. If two items'
+  requirements don't overlap at all, that's surfaced as a genuine,
+  honestly-computed conflict, not a guess.
+- Compares that computed range against the tank's most recent logged
+  reading and flags it in/out of range — distinct "no targets set" vs.
+  "no data logged yet" vs. "in range" vs. "out of range" vs. "conflict"
+  states, since collapsing any of those into a false all-clear would be
+  worse than showing nothing.
+- Predation risk is computed automatically and predator-centric, not
+  species-tagged: there's no "is this a shrimp" field anywhere, so every
+  livestock item's Mouth Size is compared against every other livestock
+  item's Adult Size across the whole roster. An item whose mouth is big
+  enough to threaten something smaller gets flagged ⚠ Predation Risk,
+  expandable to the specific list of what it endangers. A per-item
+  override excludes a false positive (e.g. Otocinclus) from the check
+  entirely.
+- No species database, no fetching, nothing fabricated — a "Copy research
+  prompt" button per item generates a ready-to-paste research question
+  (tuned to the tank's freshwater/saltwater type) for whatever AI the
+  user already has; the actual research step is intentionally handed off
+  rather than guessed at.
+
 **Build Checklist**
 - Ordered setup steps with two kinds of dependencies: `dependsOn` (this
   step can't be checked off until another step is) and `rosterLinks`
