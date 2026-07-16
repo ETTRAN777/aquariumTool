@@ -3,6 +3,7 @@ import { DataProvider, useData } from './lib/DataContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Roster from './pages/Roster';
+import Targets from './pages/Targets';
 import Checklist from './pages/Checklist';
 import Log from './pages/Log';
 import Schedule from './pages/Schedule';
@@ -32,6 +33,7 @@ function AppShell() {
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/roster" element={<Roster />} />
+          <Route path="/targets" element={<Targets />} />
           <Route path="/checklist" element={<Checklist />} />
           <Route path="/log" element={<Log />} />
           <Route path="/schedule" element={<Schedule />} />

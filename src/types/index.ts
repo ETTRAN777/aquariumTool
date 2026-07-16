@@ -1,5 +1,31 @@
 export type SourcingStatus = 'idea' | 'wishlist' | 'ordered' | 'arrived' | 'acclimating' | 'established';
 
+// A researched min/max for one water parameter, entered per livestock/plant
+// roster item (not fetched — there's no reliable free source for this data;
+// see the Targets page's "Copy research prompt" feature, which hands the
+// actual research step off to whatever AI the user already has). The
+// Targets page intersects these across every item that has one set, so the
+// tank-wide target for a parameter is automatically the range that
+// satisfies every species at once — and if two items' ranges don't
+// overlap at all, that's a real, honestly-computed incompatibility
+// warning, not a guess.
+export interface ParamTarget {
+  min?: number;
+  max?: number;
+}
+
+// A researched fact about a specific livestock/plant item — adult size,
+// temperament, whether it's shrimp-safe, light needs, whatever's relevant.
+// Unlike water param targets, these aren't aggregated/intersected across
+// the roster — they're just recorded per item for the user's own
+// reference alongside the research prompt that helped find them.
+export interface RosterItemTrait {
+  id: string;
+  label: string;
+  type: CustomFieldType;
+  value?: CustomFieldValue;
+}
+
 export interface RosterItem {
   id: string;
   name: string;
@@ -10,6 +36,31 @@ export interface RosterItem {
   cost?: number;
   quantity?: number;
   notes?: string;
+  // Targets page fields — only meaningful for livestock/plant items, but
+  // not type-restricted to those categories since a category could
+  // theoretically change after targets were already set.
+  waterParamTargets?: Partial<Record<keyof WaterParams, ParamTarget>>;
+  // Livestock-only. Kept as dedicated, strongly-typed fields rather than
+  // generic traits because they drive a real computed value (shrimp
+  // predation risk) rather than just being displayed — a generic
+  // label-string-matched trait would be fragile to rename/duplicate/typo
+  // in a way that silently breaks the computation. Deliberately stored in
+  // each field's natural unit (mm for a small, precise mouth measurement;
+  // inches for the size hobbyists actually think in) rather than forcing
+  // one shared unit — the comparison itself converts, see lib/targets.ts.
+  mouthSizeMm?: number;
+  adultSizeIn?: number;
+  // true = exclude this item's mouth size from the tank-wide predation-risk
+  // calculation entirely, so it can't flag OTHER items as at risk. For
+  // edge cases where mouth size alone overstates the threat — Otocinclus
+  // is the standing example: a moderate mouth size that in practice is
+  // not a shrimp predator.
+  predatorRiskOverride?: boolean;
+  // Free-form researched facts that aren't computed from anything —
+  // temperament, fin-nipping reputation, light needs, growth rate, or a
+  // fully custom one. Unlike mouth/adult size, these are just recorded
+  // for the user's own reference.
+  traits?: RosterItemTrait[];
 }
 
 export interface RosterLink {
