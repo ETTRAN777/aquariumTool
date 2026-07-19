@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { TARGET_TRAIT_PRESETS } from '../data/targetTraitPresets';
+import { CATEGORY_LABELS } from '../lib/constants';
 import {
   aggregateWaterParamTarget,
   computeParamStatus,
@@ -13,6 +14,13 @@ import type { RosterItem, RosterItemTrait, WaterParams, CustomFieldType, CustomF
 
 const FRESHWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'gh', 'kh', 'tds'];
 const SALTWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'salinity'];
+
+// Only two categories are ever targetable here (livestock/plant), so unlike
+// Roster's fixed 5-category sort, "by category" just flip-flops which of
+// the two goes on top — clicking it again while already active swaps
+// leadCategory rather than needing a separate reverse mode.
+type TargetableCategory = 'livestock' | 'plant';
+type SortMode = 'default' | 'category';
 
 const STATUS_STYLES: Record<TargetStatus, { label: string; classes: string }> = {
   'no-target': { label: 'No targets set', classes: 'border-moss/15 bg-deepwater-2' },
@@ -27,14 +35,37 @@ export default function Targets() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [threatListOpenId, setThreatListOpenId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TargetableCategory | 'all'>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('default');
+  const [leadCategory, setLeadCategory] = useState<TargetableCategory>('livestock');
 
   if (!activeTank) return null;
   const tank = activeTank;
 
   const relevantParams = tank.waterType === 'saltwater' ? SALTWATER_PARAMS : FRESHWATER_PARAMS;
+  // Unfiltered — the tank-wide summary and the "add something first" empty
+  // state should reflect everything targetable regardless of the filter/sort
+  // controls below, which only affect the per-item card list.
   const targetableItems = tank.roster.filter(
     (r) => r.category === 'livestock' || r.category === 'plant'
   );
+
+  let displayedItems = targetableItems.filter((r) => filter === 'all' || r.category === filter);
+  if (sortMode === 'category') {
+    displayedItems = [...displayedItems].sort((a, b) => {
+      const aRank = a.category === leadCategory ? 0 : 1;
+      const bRank = b.category === leadCategory ? 0 : 1;
+      return aRank - bRank;
+    });
+  }
+
+  function toggleCategorySort() {
+    if (sortMode !== 'category') {
+      setSortMode('category');
+    } else {
+      setLeadCategory((c) => (c === 'livestock' ? 'plant' : 'livestock'));
+    }
+  }
 
   function latestValue(param: keyof WaterParams): number | undefined {
     const entry = tank.logs.find((l) => l.params?.[param] !== undefined);
@@ -175,7 +206,38 @@ export default function Targets() {
       {/* Per-item editors */}
       {targetableItems.length > 0 && (
         <div className="space-y-3">
-          {targetableItems.map((item) => {
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-2">
+              <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
+              <FilterPill
+                active={filter === 'livestock'}
+                onClick={() => setFilter('livestock')}
+                label={CATEGORY_LABELS.livestock}
+              />
+              <FilterPill
+                active={filter === 'plant'}
+                onClick={() => setFilter('plant')}
+                label={CATEGORY_LABELS.plant}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SortPill
+                active={sortMode === 'default'}
+                onClick={() => setSortMode('default')}
+                label="Default order"
+              />
+              <SortPill
+                active={sortMode === 'category'}
+                onClick={toggleCategorySort}
+                label={
+                  sortMode === 'category'
+                    ? `By category (${CATEGORY_LABELS[leadCategory]} first)`
+                    : 'By category'
+                }
+              />
+            </div>
+          </div>
+          {displayedItems.map((item) => {
             const isExpanded = expandedId === item.id;
             const threats = computePredationThreats(tank.roster, item);
             const isThreatListOpen = threatListOpenId === item.id;
@@ -186,10 +248,12 @@ export default function Targets() {
                   className="w-full flex items-start justify-between text-left gap-3"
                 >
                   <div className="min-w-0">
-                    <span className="text-sm font-medium text-foam">
-                      {item.name}
-                      <span className="text-xs text-foam-dim ml-2">({item.category})</span>
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="pill py-0.5 px-2 font-mono text-[10px] uppercase tracking-wide text-sand bg-sand/10">
+                        {CATEGORY_LABELS[item.category]}
+                      </span>
+                      <span className="text-sm font-medium text-foam">{item.name}</span>
+                    </div>
                     {/* Pills stay visible whether or not the card is expanded — a
                         Predation Risk flag or a researched trait shouldn't disappear
                         the moment you collapse the card back down. The click-to-list
@@ -205,14 +269,18 @@ export default function Targets() {
                           Predator check excluded
                         </span>
                       )}
-                      {(item.traits ?? []).map((trait) => (
-                        <span
-                          key={trait.id}
-                          className="pill text-[11px] py-0.5 px-2 bg-sand/10 text-sand border border-sand/20"
-                        >
-                          {trait.label}: {formatTraitValue(trait)}
-                        </span>
-                      ))}
+                      {(item.traits ?? []).map((trait) => {
+                        const traitText = `${trait.label}: ${formatTraitValue(trait)}`;
+                        return (
+                          <span
+                            key={trait.id}
+                            title={traitText}
+                            className="pill text-[11px] py-0.5 px-2 bg-sand/10 text-sand border border-sand/20 max-w-[180px] truncate inline-block align-bottom"
+                          >
+                            {traitText}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                   <span className="text-xs text-foam-dim shrink-0">{isExpanded ? '▲' : '▼'}</span>
@@ -335,8 +403,8 @@ export default function Targets() {
                       {(item.traits ?? []).length > 0 && (
                         <div className="space-y-2 mb-3">
                           {item.traits!.map((trait) => (
-                            <div key={trait.id} className="flex items-center gap-2">
-                              <span className="text-xs text-foam-dim w-36 shrink-0 truncate">
+                            <div key={trait.id} className="flex items-start gap-2">
+                              <span className="text-xs text-foam-dim w-36 shrink-0 truncate pt-1.5">
                                 {trait.label}
                               </span>
                               <TraitInput
@@ -345,7 +413,7 @@ export default function Targets() {
                               />
                               <button
                                 onClick={() => removeTrait(item, trait.id)}
-                                className="btn-icon danger text-xs shrink-0"
+                                className="btn-icon danger text-xs shrink-0 mt-1"
                                 aria-label="Remove trait"
                               >
                                 ✕
@@ -364,9 +432,60 @@ export default function Targets() {
               </div>
             );
           })}
+          {displayedItems.length === 0 && (
+            <p className="text-foam-dim text-sm py-8 text-center">
+              Nothing matches this filter.
+            </p>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`pill py-1.5 px-3 ${
+        active
+          ? 'bg-moss text-foam'
+          : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SortPill({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`pill py-1.5 px-3 text-xs ${
+        active
+          ? 'bg-moss text-foam'
+          : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -425,11 +544,40 @@ function TraitInput({
   }
 
   return (
-    <input
-      type="text"
+    <AutoResizeTextarea
       value={typeof trait.value === 'string' ? trait.value : ''}
-      onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
-      className="field text-xs px-2 py-1 flex-1"
+      onChange={(v) => onChange(v === '' ? undefined : v)}
+    />
+  );
+}
+
+// Grows to fit its content instead of scrolling/clipping — used for free-text
+// traits like Temperament that can run long. Only affects this expanded-card
+// editor; the collapsed-card pill summary keeps its own separate ellipsis
+// truncation regardless of how tall this gets.
+function AutoResizeTextarea({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="field text-xs px-2 py-1 flex-1 resize-none overflow-hidden leading-relaxed"
     />
   );
 }
