@@ -107,6 +107,11 @@ they already know.
 ### Site feature list
 
 **Getting started**
+- Tracks a tank from the moment it's still just an idea — before purchase,
+  before setup, before a single water test — not only after the tank is
+  already running, which is where most tank-logging tools start. Worth
+  leading with when explaining the site to a first-time user (see below):
+  it's the thing most distinguishes this from a typical parameter logger.
 - No account, no sign-up, fully client-side — everything lives in the
   browser's local storage. Nothing is sent to a server.
 - Multiple tanks per person, switchable from a dropdown in the header.

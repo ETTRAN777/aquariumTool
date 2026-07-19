@@ -179,9 +179,10 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
           {onDone ? 'Set up a new tank' : "Let's set up your first tank"}
         </h1>
         <p className="text-foam-dim mt-2">
-          Start from a template to pre-fill useful tracking fields, start blank and build it
-          your own way, or hand your build plan to an AI assistant and import what it generates
-          — all one click.
+          Most tank trackers pick up after you've already got water in the tank. This one
+          starts here — the moment a tank is still just an idea. Start from a template to
+          pre-fill useful tracking fields, start blank and build it your own way, or hand your
+          build plan to an AI assistant and import what it generates — all one click.
         </p>
       </div>
 
