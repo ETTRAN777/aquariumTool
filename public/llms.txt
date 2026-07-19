@@ -9,7 +9,7 @@
 
 ## For AI assistants
 
-- [JSON Import Format Reference](https://ettran777.github.io/aquariumTool/docs.txt): The authoritative reference for generating an importable tank plan as a JSON file — full schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf. (This is a plain static mirror of the in-app /docs page — the app itself uses hash-based routing, so /docs by itself isn't reachable by a plain fetch; this .txt file is.)
+- [AI Quickstart & Import Guide](https://ettran777.github.io/aquariumTool/docs.txt): The authoritative reference for an AI assistant helping with this app — full feature context across every page, the JSON import schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf. (This is a plain static mirror of the in-app /docs page — the app itself uses hash-based routing, so /docs by itself isn't reachable by a plain fetch; this .txt file is.)
 
 ## Site
 

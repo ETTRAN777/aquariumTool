@@ -1,14 +1,21 @@
 import { PRESET_FIELDS } from './presetFields';
+import { TARGET_TRAIT_PRESETS } from './targetTraitPresets';
 
 const presetFieldLines = PRESET_FIELDS.map((f) => `- ${f.label} (${f.type}, ${f.waterType})`).join('\n');
+const targetTraitPresetLines = TARGET_TRAIT_PRESETS.map(
+  (t) => `- ${t.label} (${t.type}, ${t.appliesTo} only)`
+).join('\n');
 
-export const JSON_FORMAT_DOCS = `# Tank Tracker — Import JSON Format Reference
+export const JSON_FORMAT_DOCS = `# Tank Tracker — AI Quickstart & Import Guide
 
-This document describes the JSON format used by this app's tank import feature.
-If you are an AI assistant: use this reference to generate a valid, importable
-JSON file from a user's aquarium build plan, however detailed or informal that
-plan is. The user will import the resulting file directly — no other setup
-needed, even as a first-time user of the site with no existing tanks.
+This document is written for AI assistants helping someone plan or manage an
+aquarium using this app. It has two jobs: give you real, current context on
+everything the site can do (so you can talk about it accurately instead of
+guessing), and define the JSON format used by the app's import feature, so
+you can generate a valid, importable file from a user's build plan, however
+detailed or informal that plan is. The user will import the resulting file
+directly — no other setup needed, even as a first-time user of the site with
+no existing tanks.
 
 Output ONLY the JSON when generating a file for the user, unless they ask for
 explanation too.
@@ -123,8 +130,11 @@ they already know.
 - Cost tracking per item, with a running total that only counts items
   still at "wishlist" or later (an "idea" doesn't count toward the
   budget, since it's explicitly undecided).
+- Filterable by category and sortable (default add-order, by category,
+  or by sourcing status) — display-only controls, no effect on the
+  underlying data or the import/export format below.
 
-**Targets**
+**Compatibility** *(internally still called Targets in the codebase/URL — \`/targets\` — only the user-facing label changed)*
 - Per livestock/plant roster item: optional researched water-parameter
   target ranges, plus dedicated Mouth Size (mm) and Adult Size (in)
   fields for livestock, plus free-form traits (temperament, fin-nipper,
@@ -152,6 +162,9 @@ they already know.
   (tuned to the tank's freshwater/saltwater type) for whatever AI the
   user already has; the actual research step is intentionally handed off
   rather than guessed at.
+- Filterable to livestock-only or plant-only, and sortable by category
+  (toggle which of the two comes first) — same display-only caveat as
+  Roster's filters above.
 
 **Build Checklist**
 - Ordered setup steps with two kinds of dependencies: \`dependsOn\` (this
@@ -295,6 +308,55 @@ plant, or livestock.
 | cost | number | no | Approximate USD. Omit if genuinely unknown; use the midpoint if the plan gives a range |
 | quantity | number | no | Omit for single/uncountable items |
 | notes | string | no | |
+| waterParamTargets | object, keyed by water param | no | Compatibility page fields — see ParamTarget below. Only meaningful for \`livestock\`/\`plant\` items. **Only include real, researched values** — see the warning under "Generation guidelines" below |
+| mouthSizeMm | number | no | Livestock only. Drives the automatic Predation Risk computation — see below |
+| adultSizeIn | number | no | Livestock only. Drives the automatic Predation Risk computation — see below |
+| predatorRiskOverride | boolean | no | Livestock only. \`true\` excludes this item's mouth size from flagging other, smaller items as at risk (the in-app example is Otocinclus — a moderate mouth size that isn't actually a shrimp predator) |
+| traits | array of RosterItemTrait | no | Compatibility page's free-form researched facts (temperament, fin-nipper, light needs, etc.) — see RosterItemTrait below |
+
+### ParamTarget
+
+A researched min/max range for one water parameter, only meaningful on a
+\`livestock\`/\`plant\` roster item. Keyed by the same parameter names as
+WaterParams (\`temperature\`, \`ph\`, \`gh\`, \`kh\`, \`tds\`, \`salinity\`, etc.):
+
+\`\`\`json
+"waterParamTargets": {
+  "ph": { "min": 6.5, "max": 7.5 },
+  "gh": { "min": 4, "max": 8 }
+}
+\`\`\`
+
+Either \`min\` or \`max\` alone is valid (e.g. "tolerates up to 78°F" as just
+\`{ "max": 78 }\`). The app intersects these across every item that has one
+set to compute the tank-wide target per parameter — the tightest min and
+tightest max across the whole roster — so a range entered here should be
+the actual researched tolerance for that specific species/plant, not a
+guess at what the whole tank should be.
+
+### RosterItemTrait
+
+A single free-form researched fact, recorded per item and not aggregated
+or computed from — just displayed back to the user for reference:
+
+\`\`\`json
+{ "id": "unique-trait-id", "label": "😊 Temperament", "type": "text", "value": "Peaceful, semi-aggressive toward same-species males" }
+\`\`\`
+
+| Field | Type | Notes |
+|---|---|---|
+| id | string | unique within this item |
+| label | string | Shown as-is in the UI |
+| type | \`"number"\` \\| \`"text"\` \\| \`"boolean"\` | |
+| value | number \\| string \\| boolean | Omit if not yet researched — an empty trait is valid and just shows up as unset in the UI |
+
+Reuse these preset labels verbatim when they fit, the same way preset
+custom fields work above:
+
+${targetTraitPresetLines}
+
+Not limited to these — invent new ones using the same three-type system
+when nothing above fits.
 
 ## ChecklistTask
 
@@ -402,6 +464,20 @@ you have specific intervals in mind?"*
   and a detail note explaining what's undecided — its cost won't count
   toward the total while it stays at that status, so it's safe to include
   even with a rough cost estimate attached.
+
+- **Don't fabricate \`waterParamTargets\`, \`mouthSizeMm\`, \`adultSizeIn\`, or
+  \`traits\` values.** These are meant to be genuinely researched facts about
+  a specific species or plant, not estimates. If the user's plan already
+  states one directly (e.g. "guppies, pH 7-8"), include it. Otherwise leave
+  these fields unset on the roster item — that's the expected, common case
+  for a fresh import — rather than inventing a plausible-looking range. The
+  in-app "Copy research prompt" button on the Compatibility page exists
+  specifically to hand that research step to an AI properly, with the
+  result reviewed and entered by the user afterward. The one exception:
+  if the user explicitly asks you to research and fill these in now, do
+  so, and say plainly that the values are from general knowledge and
+  should be double-checked, the same way you'd caveat any other factual
+  claim.
 
 ## Full example
 

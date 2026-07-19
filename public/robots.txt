@@ -8,6 +8,8 @@
 # commonly cited cadence) against each vendor's current published bot docs.
 # Last reviewed: 2026-07.
 
+Sitemap: https://ettran777.github.io/aquariumTool/sitemap.xml
+
 # General crawlers — allowed by default (search engines, everything
 # not explicitly listed below).
 User-agent: *

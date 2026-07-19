@@ -68,8 +68,8 @@ export default function Roster() {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
           <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
           {(Object.keys(CATEGORY_LABELS) as RosterItem['category'][]).map((cat) => (
             <FilterPill
@@ -80,7 +80,7 @@ export default function Roster() {
             />
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
           <SortPill active={sortMode === 'default'} onClick={() => setSortMode('default')} label="Default order" />
           <SortPill active={sortMode === 'category'} onClick={() => setSortMode('category')} label="By category" />
           <SortPill active={sortMode === 'status'} onClick={() => setSortMode('status')} label="By status" />
@@ -223,7 +223,7 @@ function SortPill({
   return (
     <button
       onClick={onClick}
-      className={`pill py-1.5 px-3 text-xs ${
+      className={`pill py-1.5 px-3 text-xs shrink-0 whitespace-nowrap ${
         active
           ? 'bg-moss text-foam'
           : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'
@@ -246,7 +246,7 @@ function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`pill py-1.5 px-3 ${
+      className={`pill py-1.5 px-3 shrink-0 whitespace-nowrap ${
         active
           ? 'bg-moss text-foam'
           : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'

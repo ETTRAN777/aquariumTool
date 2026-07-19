@@ -49,15 +49,23 @@ function transpile(filePath) {
 const tempDir = mkdtempSync(path.join(tmpdir(), 'gen-docs-'));
 try {
   const presetFieldsJs = transpile(path.join(projectRoot, 'src/data/presetFields.ts'));
+  const targetTraitPresetsJs = transpile(path.join(projectRoot, 'src/data/targetTraitPresets.ts'));
   const apiDocsJs = transpile(path.join(projectRoot, 'src/data/apiDocs.ts'));
 
   writeFileSync(path.join(tempDir, 'presetFields.js'), presetFieldsJs);
+  // targetTraitPresets.ts imports the CustomFieldType *type* from
+  // '../types' — transpileModule strips type-only imports entirely, so
+  // there's no runtime import left pointing at a types.js that doesn't
+  // exist here. Only presetFields.js and apiDocs.js need writing out.
+  writeFileSync(path.join(tempDir, 'targetTraitPresets.js'), targetTraitPresetsJs);
   // transpileModule() strips TS syntax but leaves import specifiers
   // untouched — Node's ESM resolver needs the explicit .js extension on
   // relative imports that tsc's own bundled emit would normally add.
   writeFileSync(
     path.join(tempDir, 'apiDocs.js'),
-    apiDocsJs.replace("from './presetFields';", "from './presetFields.js';")
+    apiDocsJs
+      .replace("from './presetFields';", "from './presetFields.js';")
+      .replace("from './targetTraitPresets';", "from './targetTraitPresets.js';")
   );
 
   const modulePath = path.join(tempDir, 'apiDocs.js');

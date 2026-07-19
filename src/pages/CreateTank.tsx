@@ -195,7 +195,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
               Have a build plan already?
             </p>
             <p className="text-sm text-foam">
-              Paste our JSON format reference into an AI assistant along with your own plan,
+              Paste our AI quickstart guide into an AI assistant along with your own plan,
               however detailed — it can generate a file you import directly below, no template
               or questionnaire needed.
             </p>

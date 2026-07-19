@@ -144,13 +144,8 @@ export default function Targets() {
       <div>
         <h2 className="font-display text-2xl font-semibold">Compatibility</h2>
         <p className="text-sm text-foam-dim mt-1">
-          Set researched target ranges per livestock/plant item below — the tank-wide target for
-          each water parameter is automatically the range that works for everything you've added,
-          checked against your most recent logged reading. Mouth Size and Adult Size (livestock
-          only) automatically compute a Predation Risk flag on anything whose mouth is big enough
-          to threaten something smaller elsewhere in the roster — nothing else here is computed
-          for you, only recorded for your own reference. Nothing is fetched or guessed; the "Copy
-          research prompt" button hands the actual research step to whatever AI you already use.
+          Set researched target ranges per item below — the tank-wide target for each parameter
+          is the overlap that works for everything you've added.
         </p>
       </div>
 
@@ -206,8 +201,8 @@ export default function Targets() {
       {/* Per-item editors */}
       {targetableItems.length > 0 && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
               <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
               <FilterPill
                 active={filter === 'livestock'}
@@ -220,7 +215,7 @@ export default function Targets() {
                 label={CATEGORY_LABELS.plant}
               />
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
               <SortPill
                 active={sortMode === 'default'}
                 onClick={() => setSortMode('default')}
@@ -455,7 +450,7 @@ function FilterPill({
   return (
     <button
       onClick={onClick}
-      className={`pill py-1.5 px-3 ${
+      className={`pill py-1.5 px-3 shrink-0 whitespace-nowrap ${
         active
           ? 'bg-moss text-foam'
           : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'
@@ -478,7 +473,7 @@ function SortPill({
   return (
     <button
       onClick={onClick}
-      className={`pill py-1.5 px-3 text-xs ${
+      className={`pill py-1.5 px-3 text-xs shrink-0 whitespace-nowrap ${
         active
           ? 'bg-moss text-foam'
           : 'bg-deepwater text-foam-dim hover:text-foam border border-moss/30'

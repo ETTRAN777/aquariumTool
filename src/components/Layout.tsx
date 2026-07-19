@@ -74,14 +74,14 @@ export default function Layout() {
             </option>
           </select>
         </div>
-        <nav className="flex flex-wrap gap-1 items-center">
+        <nav className="flex flex-nowrap md:flex-wrap gap-1 items-center overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                `px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 whitespace-nowrap ${
                   isActive
                     ? 'bg-moss text-foam'
                     : 'text-foam-dim hover:text-foam hover:bg-deepwater-2'
@@ -94,7 +94,7 @@ export default function Layout() {
           <NavLink
             to="/settings"
             className={({ isActive }) =>
-              `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              `px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 ${
                 isActive
                   ? 'bg-moss text-foam'
                   : 'text-foam-dim hover:text-foam hover:bg-deepwater-2'
@@ -105,30 +105,30 @@ export default function Layout() {
           >
             ⚙
           </NavLink>
-          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-moss/30">
+          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-moss/30 shrink-0">
             <NavLink
               to="/docs"
               className={({ isActive }) =>
-                `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                `px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 whitespace-nowrap ${
                   isActive
                     ? 'bg-moss text-foam'
                     : 'text-foam-dim hover:text-amber hover:bg-deepwater-2'
                 }`
               }
-              title="JSON format reference — for generating an importable tank plan with an AI assistant"
+              title="AI Quickstart & Import Guide — full site context and import format reference for an AI assistant"
             >
               Docs
             </NavLink>
             <button
               onClick={() => exportData(data, activeTank.name)}
-              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors"
+              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
               title="Download a JSON backup of all your data"
             >
               Export
             </button>
             <button
               onClick={() => navigate('/new-tank')}
-              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors"
+              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
               title="Bring in a tank from a backup file"
             >
               Import
