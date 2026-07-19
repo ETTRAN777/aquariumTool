@@ -1,6 +1,8 @@
 # Tank Tracker
 
-> A free, local-first aquarium planning and tracking tool. No account, no
+> A free, local-first aquarium planning and tracking tool. Starts tracking a
+> tank from the moment it's still just an idea — before purchase, before
+> setup — not only after water testing begins. No account, no
 > server — all data stays in the browser. Supports freshwater and
 > saltwater/reef tanks across seven build templates, six of which include
 > a guided stocking questionnaire. Roster, build checklist, weekly log,
