@@ -1,13 +1,31 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { todayIso } from '../lib/date';
 import { MOOD_LABELS } from '../lib/constants';
+import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '../lib/conceptImage';
 import type { CustomFieldValue } from '../types';
 
 export default function Dashboard() {
   const { activeTank } = useData();
+  const [copiedPrompt, setCopiedPrompt] = useState<'simple' | 'detailed' | null>(null);
   if (!activeTank) return null;
   const { roster, checklist, logs, customFields, schedule } = activeTank;
+
+  function handleCopyImagePrompt(variant: 'simple' | 'detailed') {
+    if (!activeTank) return;
+    const prompt =
+      variant === 'simple'
+        ? buildConceptImagePromptSimple(activeTank)
+        : buildConceptImagePromptDetailed(activeTank);
+    navigator.clipboard
+      .writeText(prompt)
+      .then(() => {
+        setCopiedPrompt(variant);
+        setTimeout(() => setCopiedPrompt(null), 2000);
+      })
+      .catch(() => {});
+  }
 
   const tasksDone = checklist.filter((c) => c.done).length;
   const progressPct = checklist.length
@@ -92,6 +110,21 @@ export default function Dashboard() {
             Every build step is checked off. Time to log the launch.
           </p>
         )}
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={() => handleCopyImagePrompt('simple')}
+            className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+          >
+            {copiedPrompt === 'simple' ? '✓ Copied to clipboard' : '🖼 Copy concept image prompt'}
+          </button>
+          <span className="text-foam-dim/30 text-xs">·</span>
+          <button
+            onClick={() => handleCopyImagePrompt('detailed')}
+            className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+          >
+            {copiedPrompt === 'detailed' ? '✓ Copied to clipboard' : 'detailed version'}
+          </button>
+        </div>
       </section>
 
       {/* Stats row */}

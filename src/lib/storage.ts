@@ -1,5 +1,6 @@
 import type { AppData, Tank, CustomFieldDef } from '../types';
 import { seedData } from '../data/seed';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH } from './constants';
 
 const STORAGE_KEY = 'tank-tracker:data:v1';
 
@@ -7,7 +8,8 @@ const STORAGE_KEY = 'tank-tracker:data:v1';
 // have `customFields` on their tanks, and may carry the old hardcoded
 // `shrimpCount`/`berriedCount` log fields instead of `customValues`. This
 // patches old shapes up to the current one instead of crashing on load.
-function normalizeTank(raw: any): Tank {
+function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
+  const warnings: string[] = [];
   let customFields: CustomFieldDef[] = Array.isArray(raw.customFields) ? raw.customFields : [];
   let logs = Array.isArray(raw.logs) ? raw.logs : [];
 
@@ -38,12 +40,34 @@ function normalizeTank(raw: any): Tank {
     });
   }
 
-  return {
+  // maxLength on the CreateTank/Settings inputs only stops someone from
+  // *typing* past NAME_MAX_LENGTH/STYLE_MAX_LENGTH — it does nothing for
+  // a value arriving pre-formed from an imported JSON file. Clamped here
+  // too so an import can't reintroduce the exact header/layout overflow
+  // those limits exist to prevent (see the comment on the constants) —
+  // with a warning surfaced back to the caller rather than a silent cut,
+  // so an import doesn't quietly change something the user wrote.
+  let name = raw.name;
+  if (typeof raw.name === 'string' && raw.name.length > NAME_MAX_LENGTH) {
+    name = raw.name.slice(0, NAME_MAX_LENGTH);
+    warnings.push(
+      `Name was ${raw.name.length} characters — shortened to the ${NAME_MAX_LENGTH}-character limit ("${name}…").`
+    );
+  }
+  let style = raw.style;
+  if (typeof raw.style === 'string' && raw.style.length > STYLE_MAX_LENGTH) {
+    style = raw.style.slice(0, STYLE_MAX_LENGTH);
+    warnings.push(
+      `"${name}"'s description was ${raw.style.length} characters — shortened to the ${STYLE_MAX_LENGTH}-character limit.`
+    );
+  }
+
+  const tank: Tank = {
     id: raw.id,
-    name: raw.name,
+    name,
     sizeGallons: raw.sizeGallons,
     dimensions: raw.dimensions,
-    style: raw.style,
+    style,
     startDate: raw.startDate,
     customFields,
     roster: Array.isArray(raw.roster) ? raw.roster : [],
@@ -52,14 +76,21 @@ function normalizeTank(raw: any): Tank {
     schedule: Array.isArray(raw.schedule) ? raw.schedule : [],
     waterType: raw.waterType === 'saltwater' ? 'saltwater' : 'freshwater',
   };
+
+  return { tank, warnings };
 }
 
-function normalizeAppData(raw: any): AppData {
-  if (!raw || !Array.isArray(raw.tanks)) return seedData;
-  const tanks = raw.tanks.map(normalizeTank);
+function normalizeAppData(raw: any): { data: AppData; warnings: string[] } {
+  if (!raw || !Array.isArray(raw.tanks)) return { data: seedData, warnings: [] };
+  const normalized = raw.tanks.map(normalizeTank);
+  const tanks = normalized.map((n: { tank: Tank; warnings: string[] }) => n.tank);
+  const warnings = normalized.flatMap((n: { tank: Tank; warnings: string[] }) => n.warnings);
   return {
-    activeTankId: raw.activeTankId ?? tanks[0]?.id ?? '',
-    tanks,
+    data: {
+      activeTankId: raw.activeTankId ?? tanks[0]?.id ?? '',
+      tanks,
+    },
+    warnings,
   };
 }
 
@@ -77,7 +108,9 @@ export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return seedData;
-    return normalizeAppData(JSON.parse(raw));
+    const { data, warnings } = normalizeAppData(JSON.parse(raw));
+    if (warnings.length) console.warn('Tank Tracker: data normalized on load —', warnings);
+    return data;
   } catch {
     return seedData;
   }
@@ -113,7 +146,7 @@ export function exportData(data: AppData, activeTankName?: string): void {
   URL.revokeObjectURL(url);
 }
 
-export function importData(file: File): Promise<AppData> {
+export function importData(file: File): Promise<{ data: AppData; warnings: string[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

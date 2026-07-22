@@ -26,6 +26,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
 
   const [importedTanks, setImportedTanks] = useState<Tank[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
 
   function pickTemplate(t: TankTemplate) {
     setSelected(t);
@@ -96,13 +97,15 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportError(null);
+    setImportWarnings([]);
     try {
       const parsed = await importData(file);
-      if (parsed.tanks.length === 0) {
+      if (parsed.data.tanks.length === 0) {
         setImportError('That file has no tanks in it.');
         setImportedTanks(null);
       } else {
-        setImportedTanks(parsed.tanks);
+        setImportedTanks(parsed.data.tanks);
+        setImportWarnings(parsed.warnings);
       }
     } catch {
       setImportError('Could not read that file — is it a tank tracker backup?');
@@ -348,6 +351,18 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
           className="text-sm text-foam-dim file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-moss/30 file:bg-transparent file:text-foam-dim file:text-xs file:cursor-pointer hover:file:text-foam hover:file:border-moss/60 file:transition-colors"
         />
         {importError && <p className="text-xs text-coral">{importError}</p>}
+        {importWarnings.length > 0 && (
+          <div className="bg-amber/10 border border-amber/30 rounded-md px-3 py-2 space-y-1">
+            <p className="text-xs text-amber font-medium">
+              ⚠ Some fields were shortened to fit — the rest of the import went through fine.
+            </p>
+            {importWarnings.map((w, i) => (
+              <p key={i} className="text-xs text-foam-dim">
+                {w}
+              </p>
+            ))}
+          </div>
+        )}
         {importedTanks && (() => {
           const newOnes = importedTanks.filter(
             (t) =>
