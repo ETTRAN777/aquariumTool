@@ -107,6 +107,8 @@ what feature requests are for (see below), not a fork.
 Have a feature idea, found a bug, or want to see how a build turns out?
 Reach out on [Reddit](https://www.reddit.com/user/Ettran777/) or [Instagram](https://www.instagram.com/ettran.7/).
 
+Promotional videos and tank jounrey soon.
+
 ## Stack
 
 - React 19 + TypeScript
