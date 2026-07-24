@@ -122,19 +122,13 @@ export default function Layout() {
             ⚙
           </NavLink>
           <div className="flex items-center gap-1 ml-2 pl-2 border-l border-moss/30 shrink-0">
-            <NavLink
-              to="/docs"
-              className={({ isActive }) =>
-                `px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 whitespace-nowrap ${
-                  isActive
-                    ? 'bg-moss text-foam'
-                    : 'text-foam-dim hover:text-amber hover:bg-deepwater-2'
-                }`
-              }
-              title="AI Quickstart & Import Guide — full site context and import format reference for an AI assistant"
+            <button
+              onClick={() => navigate('/new-tank')}
+              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
+              title="Bring in a tank from a backup file"
             >
-              Docs
-            </NavLink>
+              Import
+            </button>
             <button
               onClick={() => exportData(data, activeTank.name)}
               className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
@@ -156,13 +150,19 @@ export default function Layout() {
                     ? '⚠ Failed'
                     : 'Upload to Drive'}
             </button>
-            <button
-              onClick={() => navigate('/new-tank')}
-              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
-              title="Bring in a tank from a backup file"
+            <NavLink
+              to="/docs"
+              className={({ isActive }) =>
+                `px-3 py-2 rounded-md text-sm font-medium transition-colors shrink-0 whitespace-nowrap ${
+                  isActive
+                    ? 'bg-moss text-foam'
+                    : 'text-foam-dim hover:text-amber hover:bg-deepwater-2'
+                }`
+              }
+              title="AI Quickstart & Import Guide — full site context and import format reference for an AI assistant"
             >
-              Import
-            </button>
+              Docs
+            </NavLink>
           </div>
         </nav>
       </header>
