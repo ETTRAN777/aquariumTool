@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
-import { exportData } from '../lib/storage';
+import { exportData, serializeBackup } from '../lib/storage';
+import { uploadBackup } from '../lib/googleDrive';
 import Waterline from './Waterline';
 
 const navItems = [
@@ -18,6 +20,20 @@ const NEW_TANK_VALUE = '__new__';
 export default function Layout() {
   const { activeTank, data, setActiveTankId } = useData();
   const navigate = useNavigate();
+  const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+
+  async function handleUploadToDrive() {
+    setDriveStatus('uploading');
+    try {
+      await uploadBackup(serializeBackup(data));
+      setDriveStatus('done');
+    } catch (err) {
+      console.error(err);
+      setDriveStatus('error');
+    } finally {
+      setTimeout(() => setDriveStatus('idle'), 2500);
+    }
+  }
 
   function handleTankSwitch(e: React.ChangeEvent<HTMLSelectElement>) {
     if (e.target.value === NEW_TANK_VALUE) {
@@ -125,6 +141,20 @@ export default function Layout() {
               title="Download a JSON backup of all your data"
             >
               Export
+            </button>
+            <button
+              onClick={handleUploadToDrive}
+              disabled={driveStatus === 'uploading'}
+              className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap disabled:opacity-60"
+              title="Back up all your data to Google Drive — only happens when you click this, never automatically"
+            >
+              {driveStatus === 'uploading'
+                ? 'Uploading…'
+                : driveStatus === 'done'
+                  ? '✓ Uploaded'
+                  : driveStatus === 'error'
+                    ? '⚠ Failed'
+                    : 'Upload to Drive'}
             </button>
             <button
               onClick={() => navigate('/new-tank')}

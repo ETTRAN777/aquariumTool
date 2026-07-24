@@ -131,8 +131,14 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+// Shared by exportData() (file download) and Google Drive upload — same
+// formatting regardless of destination.
+export function serializeBackup(data: AppData): string {
+  return JSON.stringify(data, null, 2);
+}
+
 export function exportData(data: AppData, activeTankName?: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const blob = new Blob([serializeBackup(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const date = new Date().toISOString().split('T')[0];
@@ -146,16 +152,23 @@ export function exportData(data: AppData, activeTankName?: string): void {
   URL.revokeObjectURL(url);
 }
 
+// Shared by importData() (file picker) and Google Drive download — same
+// validation and normalization regardless of how the JSON text arrived, so
+// the two entry points can never quietly drift apart from each other.
+export function parseBackupJson(jsonText: string): { data: AppData; warnings: string[] } {
+  const parsed = JSON.parse(jsonText);
+  if (!parsed.tanks || !Array.isArray(parsed.tanks)) {
+    throw new Error('File does not look like a tank tracker backup');
+  }
+  return normalizeAppData(parsed);
+}
+
 export function importData(file: File): Promise<{ data: AppData; warnings: string[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(reader.result as string);
-        if (!parsed.tanks || !Array.isArray(parsed.tanks)) {
-          throw new Error('File does not look like a tank tracker backup');
-        }
-        resolve(normalizeAppData(parsed));
+        resolve(parseBackupJson(reader.result as string));
       } catch (err) {
         reject(err);
       }

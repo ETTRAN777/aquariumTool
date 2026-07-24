@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
-import { importData, tankContentKey } from '../lib/storage';
+import { importData, parseBackupJson, tankContentKey } from '../lib/storage';
+import { downloadBackup } from '../lib/googleDrive';
 import TankQuestionnaire from '../components/TankQuestionnaire';
 import type { Tank, RecommendedRosterItem } from '../types';
 import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
@@ -27,6 +28,9 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
   const [importedTanks, setImportedTanks] = useState<Tank[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [driveDownloadStatus, setDriveDownloadStatus] = useState<'idle' | 'loading'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [chosenFileName, setChosenFileName] = useState<string | null>(null);
 
   function pickTemplate(t: TankTemplate) {
     setSelected(t);
@@ -93,25 +97,54 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     onDone?.();
   }
 
+  function applyImportResult(parsed: { data: { tanks: Tank[] }; warnings: string[] }) {
+    if (parsed.data.tanks.length === 0) {
+      setImportError('That file has no tanks in it.');
+      setImportedTanks(null);
+    } else {
+      setImportedTanks(parsed.data.tanks);
+      setImportWarnings(parsed.warnings);
+    }
+  }
+
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setChosenFileName(file.name);
     setImportError(null);
     setImportWarnings([]);
     try {
-      const parsed = await importData(file);
-      if (parsed.data.tanks.length === 0) {
-        setImportError('That file has no tanks in it.');
-        setImportedTanks(null);
-      } else {
-        setImportedTanks(parsed.data.tanks);
-        setImportWarnings(parsed.warnings);
-      }
+      applyImportResult(await importData(file));
     } catch {
       setImportError('Could not read that file — is it a tank tracker backup?');
       setImportedTanks(null);
     }
     e.target.value = '';
+  }
+
+  // Reuses parseBackupJson — the exact same validation/normalization
+  // importData() runs on a file-picker upload — so a Drive download lands
+  // in this same dedup UI, same truncation warnings, same everything.
+  // Nothing downstream of this function needs to know or care that the
+  // JSON came from Drive instead of a local file.
+  async function handleDriveDownload() {
+    setImportError(null);
+    setImportWarnings([]);
+    setDriveDownloadStatus('loading');
+    try {
+      const jsonText = await downloadBackup();
+      if (jsonText === null) {
+        setImportError("No backup found in your Google Drive yet — try 'Upload to Drive' from another device first.");
+        setImportedTanks(null);
+      } else {
+        applyImportResult(parseBackupJson(jsonText));
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Could not download from Google Drive.');
+      setImportedTanks(null);
+    } finally {
+      setDriveDownloadStatus('idle');
+    }
   }
 
   // Fresh id — this is landing alongside whatever tanks already exist,
@@ -344,12 +377,32 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
             you'll be offered a choice instead of ending up with a duplicate.
           </p>
         </div>
-        <input
-          type="file"
-          accept="application/json"
-          onChange={handleImportFile}
-          className="text-sm text-foam-dim file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-moss/30 file:bg-transparent file:text-foam-dim file:text-xs file:cursor-pointer hover:file:text-foam hover:file:border-moss/60 file:transition-colors"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-1.5 rounded-md text-xs font-medium border border-moss/30 text-foam-dim hover:text-foam hover:border-moss/60 transition-colors"
+          >
+            Choose File
+          </button>
+          <span className="text-xs text-foam-dim/60 truncate max-w-[220px]">
+            {chosenFileName ?? 'No file chosen'}
+          </span>
+          <span className="text-foam-dim/50 text-xs">or</span>
+          <button
+            onClick={handleDriveDownload}
+            disabled={driveDownloadStatus === 'loading'}
+            className="px-3 py-1.5 rounded-md text-xs font-medium border border-moss/30 text-foam-dim hover:text-foam hover:border-moss/60 transition-colors disabled:opacity-60"
+          >
+            {driveDownloadStatus === 'loading' ? 'Checking Drive…' : 'Download from Google Drive'}
+          </button>
+        </div>
         {importError && <p className="text-xs text-coral">{importError}</p>}
         {importWarnings.length > 0 && (
           <div className="bg-amber/10 border border-amber/30 rounded-md px-3 py-2 space-y-1">
