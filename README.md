@@ -1,11 +1,13 @@
 # Tank Tracker
 
-A planning-and-documentation platform for freshwater aquariums — half project
-planner, half weekly journal. Works for any tank: shrimp colonies, livebearers,
-community fish, a solo betta or cichlid, planted-only builds, or anything
-else, since what each tank tracks is fully customizable.
+A planning-and-tracking platform for freshwater and saltwater/reef aquariums
+— half project planner, half weekly journal. Tracks a tank from the moment
+it's still just an idea, not only after there's water in it. Works for any
+tank: shrimp colonies, livebearers, community fish, a solo betta or cichlid,
+planted-only builds, reef tanks, or anything else, since what each tank
+tracks is fully customizable.
 
-**[Live demo →](https://ETTRAN777.github.io/aquariumTool/)**
+**[Use it →](https://ETTRAN777.github.io/aquariumTool/)**
 
 ## Technical highlights
 
@@ -33,6 +35,10 @@ else, since what each tank tracks is fully customizable.
   by comparing serialized content (excluding volatile IDs) against existing
   data, distinguishing an exact duplicate from a same-named-but-modified
   tank and offering the right action for each.
+- **AI-crawlability solved properly, not just assumed** — a client-rendered
+  SPA is invisible to a plain HTTP fetch, so the site ships a genuine
+  `noscript` fallback, structured JSON-LD, and a static `/docs.txt`/
+  `llms.txt` pair for assistants that read the page without executing JS.
 
 ## What it does
 
@@ -40,8 +46,8 @@ else, since what each tank tracks is fully customizable.
   the header
 - **Templates or blank** — start a new tank from a preset (Shrimp/Invert
   Colony, Livebearers & Fry, Community Fish, Solo Fish/Centerpiece,
-  Planted-Only) that pre-fills sensible tracking fields, or start completely
-  blank and define your own
+  Planted-Only, Reef Tank, or Blank), six of which include a guided
+  stocking questionnaire that scales results to the tank's size
 - **Custom tracking fields** — each tank decides what it logs. A shrimp tank
   might track population and berried females; a guppy tank might track fry
   count and pregnant females; a solo betta might track fin condition. Pick
@@ -51,7 +57,14 @@ else, since what each tank tracks is fully customizable.
   (idea → wishlist → ordered → arrived → acclimating → established). Items
   still at "idea" don't count toward the running cost estimate, so you can
   jot down something you're still deciding on without it skewing your
-  budget. Sortable by category or by how far along each item is
+  budget. Filterable and sortable by category or by how far along each item
+  is
+- **Compatibility** — researched water-parameter target ranges per
+  livestock/plant item, automatically intersected into a tank-wide target
+  and checked against your most recent logged reading. Mouth Size and Adult
+  Size fields drive an automatic predation-risk flag across the whole
+  roster. Nothing is fetched or fabricated — a "Copy research prompt"
+  button hands the actual research step to whatever AI you use
 - **Build Checklist** — steps can depend on other steps *or* on a roster item
   reaching a given status (e.g. "install the filter" waits until the filter
   shows "Arrived" on the roster) — fully editable, reorderable, and custom
@@ -63,6 +76,9 @@ else, since what each tank tracks is fully customizable.
   custom fields, mood tags, and photos. Deleting an entry asks for
   confirmation first, since it's usually the thing with the most effort
   behind it
+- **Schedule** — recurring or one-off maintenance reminders in a real
+  calendar view, auto-linked to a Weekly Log entry if one already exists for
+  that day
 - **Parameters** — water chemistry and any numeric custom fields auto-charted
   over time, so you can *see* trends instead of just logging numbers into a
   void
@@ -71,18 +87,26 @@ else, since what each tank tracks is fully customizable.
   duplicate is flagged instead of silently cloned; a same-named tank with
   different data (e.g. you logged more since the backup) offers a real
   choice — replace the existing one, or keep both
-- **JSON format docs** (`/docs` in the app) — the full import schema, written
-  so it can be pasted straight into an AI assistant along with a build plan
-  to generate an importable file from scratch, even for someone who's never
-  used the site before
+- **AI Quickstart & Import Guide** (`/docs` in the app) — the full site
+  context and import schema, written so it can be pasted straight into an
+  AI assistant along with a build plan to generate an importable file from
+  scratch, even for someone who's never used the site before
 
 ## Why it's built this way
 
-This is a static site with **no backend** — it's meant to be cloned/forked and
-deployed by each person to their own GitHub Pages, with data living in that
-browser's `localStorage`. One-click JSON export/import handles backups and
-moving data between devices. There's no login system and no shared data
-between users — each deployment is its own private instance.
+This is a static site with **no backend** — everything lives in your
+browser's `localStorage`, nothing is sent to a server, and there's no
+account or login. One-click JSON export/import handles backups and moving
+data between your own devices. This is the single hosted instance at the
+link above — it's not intended to be self-hosted or run as separate
+deployments; if there's something you'd want it to do differently, that's
+what feature requests are for (see below), not a fork.
+
+## Feedback & feature requests
+
+<!-- Ethan: drop your actual handle(s) here — left blank rather than guessed -->
+Have a feature idea, found a bug, or want to see how a build turns out?
+Reach out on [social media link here].
 
 ## Stack
 
@@ -92,31 +116,9 @@ between users — each deployment is its own private instance.
 - Tailwind CSS v4
 - Vite
 
-## Local development
-
-```bash
-npm install
-npm run dev
-```
-
-## Deploying to GitHub Pages
-
-1. Update `base` in `vite.config.ts` if your repo name differs from
-   `aquariumTool`.
-2. Push this repo to GitHub.
-3. Run:
-
-   ```bash
-   npm run deploy
-   ```
-
-   This builds the site and pushes `dist/` to a `gh-pages` branch via the
-   `gh-pages` package.
-4. In your repo settings → Pages, set the source to the `gh-pages` branch.
-
 ## Data & backups
 
-Everything is stored in `localStorage` under one key. Use the **Export**
+Everything is stored in your browser's `localStorage`. Use the **Export**
 button in the header regularly — it downloads a timestamped, tank-named JSON
 snapshot of every tank, roster item, checklist, log entry, and custom field
 definition. **Import** (also in the header) takes you to the same smart
