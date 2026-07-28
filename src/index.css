@@ -167,6 +167,15 @@ body {
     background: var(--color-moss-light);
   }
 
+  .btn-danger {
+    background: var(--color-coral);
+    color: var(--color-deepwater);
+    font-weight: 600;
+  }
+  .btn-danger:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+
   .btn-ghost {
     background: transparent;
     color: var(--color-foam-dim);

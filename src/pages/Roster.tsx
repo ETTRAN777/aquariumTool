@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
-import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS } from '../lib/constants';
+import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS, statusMeetsRequirement } from '../lib/constants';
 import type { RosterItem, SourcingStatus } from '../types';
 
 type SortMode = 'default' | 'category' | 'status';
@@ -31,11 +31,25 @@ export default function Roster() {
   }
 
   // Items still at "Idea" haven't actually been committed to yet, so they
-  // don't count toward the running estimate — only once something's
+  // don't count toward either number below — only once something's
   // promoted to Wishlist or further does its cost start counting.
-  const totalCost = activeTank.roster
-    .filter((r) => r.status !== 'idea')
-    .reduce((sum, r) => sum + (r.cost ?? 0), 0);
+  const budgetedItems = activeTank.roster.filter((r) => r.status !== 'idea');
+  // Estimate: every wishlist-or-later item's cost, whether that number is
+  // still a guess or the item's already been bought — same total this
+  // page has always shown, just given a name now that there's a second
+  // number to distinguish it from.
+  const estimateTotal = budgetedItems.reduce((sum, r) => sum + (r.cost ?? 0), 0);
+  // Actual: the subset of that same set which has actually been ordered
+  // or further — so as items move through the pipeline, this number
+  // organically shifts from "guess" toward "what I really spent," using
+  // the exact same `cost` field rather than a second entered value.
+  const orderedPlusItems = budgetedItems.filter((r) => statusMeetsRequirement(r.status, 'ordered'));
+  const actualTotal = orderedPlusItems.reduce((sum, r) => sum + (r.cost ?? 0), 0);
+  // Once every budgeted item has reached ordered-or-later, Estimate and
+  // Actual cover the exact same set and are mathematically identical —
+  // recomputed fresh on every render, so adding a new wishlist item later
+  // automatically splits the display back into two numbers on its own.
+  const allBudgetedItemsOrdered = budgetedItems.length > 0 && orderedPlusItems.length === budgetedItems.length;
 
   function cycleStatus(item: RosterItem) {
     const idx = STATUS_ORDER.indexOf(item.status);
@@ -50,9 +64,13 @@ export default function Roster() {
           <h2 className="font-display text-2xl font-semibold">Roster</h2>
           <p className="text-sm text-foam-dim mt-1">
             Everything going into the tank — click a status pill to advance it.
-            {totalCost > 0 && (
+            {estimateTotal > 0 && (
               <span className="font-mono text-foam ml-2">
-                · ~${totalCost.toFixed(2)} estimated
+                {allBudgetedItemsOrdered
+                  ? `· $${actualTotal.toFixed(2)} total cost`
+                  : actualTotal > 0
+                    ? `· ~$${estimateTotal.toFixed(2)} estimated · $${actualTotal.toFixed(2)} actual`
+                    : `· ~$${estimateTotal.toFixed(2)} estimated`}
               </span>
             )}
           </p>

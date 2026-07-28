@@ -3,6 +3,7 @@ import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
 import type { ScheduleTask } from '../types';
+import Toast from '../components/Toast';
 
 // Preset recurrence intervals cover the common cases (daily feeding, weekly
 // water changes, biweekly dosing, monthly filter media swaps) without asking
@@ -496,6 +497,7 @@ function TaskForm({
   const [customDays, setCustomDays] = useState(
     isRecurring && !matchingPreset ? String(initial?.recurrenceDays) : ''
   );
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const preset = RECURRENCE_PRESETS.find((p) => p.label === presetLabel)!;
   const recurrenceDays =
@@ -505,7 +507,7 @@ function TaskForm({
     e.preventDefault();
     if (!label.trim() || !dueDate) return;
     if (recurrenceDays && endDate && endDate < dueDate) {
-      alert("End date can't be before the next due date.");
+      setToastMessage("End date can't be before the next due date.");
       return;
     }
     onSave({
@@ -524,6 +526,7 @@ function TaskForm({
   }
 
   return (
+    <>
     <form onSubmit={submit} className="card border-amber/40 p-4 space-y-3">
       <div>
         <p className="field-label">Reminder</p>
@@ -605,5 +608,7 @@ function TaskForm({
         </button>
       </div>
     </form>
+    <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+    </>
   );
 }

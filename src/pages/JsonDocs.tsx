@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { JSON_FORMAT_DOCS } from '../data/apiDocs';
+import Toast from '../components/Toast';
 
 export default function JsonDocs() {
   const [copied, setCopied] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   async function handleCopy() {
     try {
@@ -11,7 +13,7 @@ export default function JsonDocs() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      alert('Could not copy automatically — select the text below and copy manually.');
+      setToastMessage('Could not copy automatically — select the text below and copy manually.');
     }
   }
 
@@ -51,6 +53,8 @@ export default function JsonDocs() {
           </pre>
         </div>
       </main>
+
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
     </div>
   );
 }

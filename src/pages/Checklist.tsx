@@ -3,6 +3,7 @@ import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { STATUS_ORDER, STATUS_LABELS, statusMeetsRequirement } from '../lib/constants';
 import type { ChecklistTask, RosterLink, SourcingStatus } from '../types';
+import Toast from '../components/Toast';
 
 export default function Checklist() {
   const { activeTank, updateTank, toggleTask } = useData();
@@ -15,6 +16,7 @@ export default function Checklist() {
   const [newRosterLinks, setNewRosterLinks] = useState<RosterLink[]>([]);
   const [showAddDeps, setShowAddDeps] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
 
   function rosterLinkSatisfied(link: RosterLink) {
@@ -69,7 +71,7 @@ export default function Checklist() {
     [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
 
     if (!isOrderValid(reordered)) {
-      alert(
+      setToastMessage(
         "Can't move a step ahead of something it depends on — remove that dependency first if you want to reorder it."
       );
       return;
@@ -108,7 +110,7 @@ export default function Checklist() {
   function saveEdit(updated: ChecklistTask) {
     const nextList = checklist.map((c) => (c.id === updated.id ? updated : c));
     if (!isOrderValid(nextList)) {
-      alert(
+      setToastMessage(
         "That dependency would put this step behind something later in the list. Move the step down first, or pick a different dependency."
       );
       return;
@@ -324,6 +326,8 @@ export default function Checklist() {
           Add step
         </button>
       </form>
+
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
     </div>
   );
 }

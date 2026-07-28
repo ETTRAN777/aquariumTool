@@ -3,12 +3,15 @@ import { useData } from '../lib/DataContext';
 import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue } from '../types';
 import { resizeImageToBase64 } from '../lib/storage';
 import { MOOD_LABELS } from '../lib/constants';
+import ConfirmModal from '../components/ConfirmModal';
+import Toast from '../components/Toast';
 
 export default function Log() {
   const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry } = useData();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LogEntry | null>(null);
 
   if (!activeTank) return null;
   const customFields = activeTank.customFields;
@@ -169,12 +172,7 @@ export default function Log() {
                       Edit
                     </button>
                     <button
-                      onClick={() => {
-                        const confirmed = confirm(
-                          `Delete "${entry.title}" (${entry.weekLabel})? This can't be undone.`
-                        );
-                        if (confirmed) deleteLogEntry(entry.id);
-                      }}
+                      onClick={() => setDeleteTarget(entry)}
                       className="btn-icon danger"
                     >
                       Delete entry
@@ -191,6 +189,23 @@ export default function Log() {
           </p>
         )}
       </div>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="Delete this entry?"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.title}" (${deleteTarget.weekLabel})? This can't be undone.`
+            : ''
+        }
+        confirmLabel="Delete entry"
+        danger
+        onConfirm={() => {
+          if (deleteTarget) deleteLogEntry(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
@@ -243,6 +258,7 @@ function EntryForm({
   );
   const [photos, setPhotos] = useState<string[]>(initial?.photoUrls ?? []);
   const [uploading, setUploading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   async function handlePhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -252,7 +268,7 @@ function EntryForm({
       const results = await Promise.all(files.map((f) => resizeImageToBase64(f)));
       setPhotos((prev) => [...prev, ...results]);
     } catch {
-      alert('Could not process one of those images.');
+      setToastMessage('Could not process one of those images.');
     }
     setUploading(false);
     e.target.value = '';
@@ -295,6 +311,7 @@ function EntryForm({
   }
 
   return (
+    <>
     <form onSubmit={submit} className={`card p-5 space-y-4 ${editing ? 'border-amber/40' : ''}`}>
       <input
         placeholder="Entry title"
@@ -419,6 +436,8 @@ function EntryForm({
         </button>
       </div>
     </form>
+    <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+    </>
   );
 }
 

@@ -4,6 +4,7 @@ import { useData } from '../lib/DataContext';
 import { PRESET_FIELDS } from '../data/presetFields';
 import type { CustomFieldDef, CustomFieldType } from '../types';
 import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
+import ConfirmModal from '../components/ConfirmModal';
 
 const TYPE_LABELS: Record<CustomFieldType, string> = {
   number: 'Number',
@@ -14,6 +15,7 @@ const TYPE_LABELS: Record<CustomFieldType, string> = {
 export default function Settings() {
   const { activeTank, updateTank, setCustomFields, deleteTank } = useData();
   const navigate = useNavigate();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const [name, setName] = useState(activeTank?.name ?? '');
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons.toString() ?? '');
@@ -68,10 +70,6 @@ export default function Settings() {
 
   function handleDeleteTank() {
     if (!activeTank) return;
-    const confirmed = confirm(
-      `Delete "${activeTank.name}" and everything in it — roster, checklist, and every log entry? This can't be undone (unless you've exported a backup).`
-    );
-    if (!confirmed) return;
     deleteTank(activeTank.id);
     navigate('/');
   }
@@ -292,10 +290,26 @@ export default function Settings() {
         <p className="text-xs text-foam-dim">
           Deletes this tank and everything in it. Export a backup first if you want to keep it.
         </p>
-        <button onClick={handleDeleteTank} className="btn bg-coral/15 text-coral hover:bg-coral/25">
+        <button
+          onClick={() => setDeleteConfirmOpen(true)}
+          className="btn bg-coral/15 text-coral hover:bg-coral/25"
+        >
           Delete this tank
         </button>
       </div>
+
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        title="Delete this tank?"
+        message={`Delete "${activeTank.name}" and everything in it — roster, checklist, and every log entry? This can't be undone (unless you've exported a backup).`}
+        confirmLabel="Delete tank"
+        danger
+        onConfirm={() => {
+          setDeleteConfirmOpen(false);
+          handleDeleteTank();
+        }}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }
