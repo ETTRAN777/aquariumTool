@@ -6,8 +6,9 @@
 > server — all data stays in the browser. Supports freshwater and
 > saltwater/reef tanks across seven build templates, six of which include
 > a guided stocking questionnaire. Roster, build checklist, weekly log,
-> maintenance schedule, and parameter charts are all generated from the
-> same underlying tank data.
+> maintenance schedule, parameter charts, and a compatibility page (researched
+> water-parameter targets and automatic predation-risk flagging) are all
+> generated from the same underlying tank data.
 
 ## For AI assistants
 

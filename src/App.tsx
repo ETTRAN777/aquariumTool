@@ -11,6 +11,7 @@ import Charts from './pages/Charts';
 import Settings from './pages/Settings';
 import CreateTank from './pages/CreateTank';
 import JsonDocs from './pages/JsonDocs';
+import Analytics from './components/Analytics';
 
 function NewTankRoute() {
   const navigate = useNavigate();
@@ -50,6 +51,7 @@ export default function App() {
   return (
     <DataProvider>
       <HashRouter>
+        <Analytics />
         <AppShell />
       </HashRouter>
     </DataProvider>

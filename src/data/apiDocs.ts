@@ -232,6 +232,13 @@ they already know.
   AI assistant following this reference — to add tanks without
   overwriting anything already present. Smart deduplication offers
   "replace" vs "keep both" when an imported tank matches an existing one.
+- Optional Google Drive backup/restore: sign in to back up or restore
+  in one click. Both directions are entirely user-triggered — no
+  background sync, no auto-upload — specifically so an edit on one
+  device can't silently overwrite an unsynced backup from another.
+  Restoring runs through the exact same smart-import flow as a manual
+  file. Scoped to a single file the app created itself — it can't see
+  anything else in the user's Drive.
 
 ## Top-level structure
 
