@@ -6,6 +6,8 @@ import { uploadBackup } from '../lib/googleDrive';
 import Waterline from './Waterline';
 import DrivePickerModal from './DrivePickerModal';
 import ConfirmModal from './ConfirmModal';
+import ExportPickerModal from './ExportPickerModal';
+import type { Tank, AppData } from '../types';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -25,6 +27,22 @@ export default function Layout() {
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
+  const [exportPickerOpen, setExportPickerOpen] = useState(false);
+
+  function handleExport(selectedTanks: Tank[]) {
+    // Single-tank export gets named for that tank, same as before — but
+    // now the content genuinely matches the filename, since previously
+    // "Export" always included every tank regardless of the name prefix.
+    // Anything else (all tanks, or an arbitrary multi-selection) gets a
+    // neutral filename rather than implying a scope that isn't accurate.
+    const payload: AppData = {
+      activeTankId: selectedTanks[0]?.id ?? '',
+      tanks: selectedTanks,
+    };
+    const name = selectedTanks.length === 1 ? selectedTanks[0].name : undefined;
+    exportData(payload, name);
+    setExportPickerOpen(false);
+  }
 
   async function handleUploadToDrive() {
     setDriveStatus('uploading');
@@ -134,9 +152,9 @@ export default function Layout() {
               Import
             </button>
             <button
-              onClick={() => exportData(data, activeTank.name)}
+              onClick={() => setExportPickerOpen(true)}
               className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap"
-              title="Download a JSON backup of all your data"
+              title="Download a JSON backup — choose all tanks, just this one, or pick specific tanks"
             >
               Export
             </button>
@@ -223,6 +241,14 @@ export default function Layout() {
           </a>
         </div>
       </footer>
+
+      <ExportPickerModal
+        open={exportPickerOpen}
+        tanks={data.tanks}
+        activeTank={activeTank}
+        onExport={handleExport}
+        onCancel={() => setExportPickerOpen(false)}
+      />
 
       <DrivePickerModal
         open={drivePickerOpen}
