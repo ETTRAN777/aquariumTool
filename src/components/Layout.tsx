@@ -7,6 +7,7 @@ import Waterline from './Waterline';
 import DrivePickerModal from './DrivePickerModal';
 import ConfirmModal from './ConfirmModal';
 import ExportPickerModal from './ExportPickerModal';
+import TankSwitcher from './TankSwitcher';
 import type { Tank, AppData } from '../types';
 
 const navItems = [
@@ -18,8 +19,6 @@ const navItems = [
   { to: '/schedule', label: 'Schedule' },
   { to: '/charts', label: 'Parameters' },
 ];
-
-const NEW_TANK_VALUE = '__new__';
 
 export default function Layout() {
   const { activeTank, data, setActiveTankId } = useData();
@@ -57,12 +56,8 @@ export default function Layout() {
     }
   }
 
-  function handleTankSwitch(e: React.ChangeEvent<HTMLSelectElement>) {
-    if (e.target.value === NEW_TANK_VALUE) {
-      navigate('/new-tank');
-      return;
-    }
-    setActiveTankId(e.target.value);
+  function handleTankSwitch(id: string) {
+    setActiveTankId(id);
     navigate('/');
   }
 
@@ -70,47 +65,19 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-deepwater text-foam font-body">
-      <header className="border-b border-moss/30 px-6 md:px-10 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="min-w-0">
+      <header className="border-b border-moss/30 px-6 md:px-10 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-mono text-xs tracking-widest text-sand uppercase">
               {activeTank.sizeGallons} gal{activeTank.style ? ` · ${activeTank.style}` : ''}
             </p>
           </div>
-          <select
-            value={activeTank.id}
-            onChange={handleTankSwitch}
-            aria-label="Switch tank"
-            className="font-display text-3xl md:text-4xl font-semibold text-foam bg-transparent border-none outline-none cursor-pointer -ml-1 max-w-full"
-          >
-            {data.tanks.map((t) => (
-              <option
-                key={t.id}
-                value={t.id}
-                style={{
-                  backgroundColor: 'var(--color-deepwater)',
-                  color: 'var(--color-foam)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '1rem',
-                  fontWeight: 400,
-                }}
-              >
-                {t.name}
-              </option>
-            ))}
-            <option
-              value={NEW_TANK_VALUE}
-              style={{
-                backgroundColor: 'var(--color-deepwater)',
-                color: 'var(--color-foam)',
-                fontFamily: 'var(--font-body)',
-                fontSize: '1rem',
-                fontWeight: 400,
-              }}
-            >
-              + New tank…
-            </option>
-          </select>
+          <TankSwitcher
+            tanks={data.tanks}
+            activeTank={activeTank}
+            onSwitch={handleTankSwitch}
+            onNewTank={() => navigate('/new-tank')}
+          />
         </div>
         <nav className="flex flex-nowrap md:flex-wrap gap-1 items-center overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
           {navItems.map((item) => (
@@ -195,7 +162,7 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      <footer className="px-6 md:px-10 py-6 border-t border-moss/20 bg-gradient-to-b from-deepwater-2 to-[#0a1f1c] flex items-center justify-between gap-4">
+      <footer className="px-6 md:px-10 py-5 border-t border-moss/20 bg-gradient-to-b from-deepwater-2 to-[#0a1f1c] flex items-center justify-between gap-4">
         <p className="font-mono text-xs text-foam-dim/60">
           Built and logged by hand. Data lives in your browser — export often.
         </p>

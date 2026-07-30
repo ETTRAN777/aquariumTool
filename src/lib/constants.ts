@@ -51,13 +51,23 @@ export function moodToScore(mood: Mood | undefined): number | undefined {
   return idx === -1 ? undefined : idx + 1; // 1 (concerned) .. 4 (thriving)
 }
 
-// Tank name renders large in the header ("125 Gal · ... / Test") and the
-// short description renders as a single line right above it — both grow
-// the whole header and push the nav around if left unbounded, rather than
-// gracefully truncating. Shared between CreateTank and Settings so the
-// two entry points can never drift out of sync with each other.
-export const NAME_MAX_LENGTH = 22;
-export const STYLE_MAX_LENGTH = 58;
+// Tank name renders large in the header via TankSwitcher, which now
+// truncates gracefully with an ellipsis (see TankSwitcher.tsx) rather than
+// growing the header and pushing the nav around — the old native <select>
+// couldn't do this reliably, which is why this limit used to be tighter.
+// 38 is a deliberately comfortable width for the header's actual
+// available space, tuned by hand against real long names, not a hard
+// breakage-prevention ceiling anymore.
+//
+// The short description above it still just wraps (no truncate/nowrap),
+// so STYLE_MAX_LENGTH is really "how many wrapped lines look reasonable
+// in the header" — 143 was similarly tuned by hand, not derived from a
+// single-line overflow constraint.
+//
+// Shared between CreateTank and Settings so the two entry points can
+// never drift out of sync with each other.
+export const NAME_MAX_LENGTH = 38;
+export const STYLE_MAX_LENGTH = 143;
 
 // Standard US retail tank dimensions by gallon size, used to auto-fill
 // Dimensions when the user leaves it blank. Sorted ascending so the
