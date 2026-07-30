@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
-import { importData, parseBackupJson, tankContentKey } from '../lib/storage';
+import { importData, parseBackupJson, tankContentKey, computeImportDiff, topImportDiffs } from '../lib/storage';
 import { downloadBackup } from '../lib/googleDrive';
 import TankQuestionnaire from '../components/TankQuestionnaire';
 import type { Tank, RecommendedRosterItem } from '../types';
@@ -134,7 +134,7 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     try {
       const jsonText = await downloadBackup();
       if (jsonText === null) {
-        setImportError("No backup found in your Google Drive yet — try 'Upload to Drive' from another device first.");
+        setImportError("No backup found in your Google Drive yet — try 'Google Drive → Upload' from another device first.");
         setImportedTanks(null);
       } else {
         applyImportResult(parseBackupJson(jsonText));
@@ -146,6 +146,19 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
       setDriveDownloadStatus('idle');
     }
   }
+
+  // Arriving here via the navbar's Google Drive picker → Download already
+  // declared intent — skip making the user press the button again and go
+  // straight to the fetch, landing directly on the diff/dedup screen.
+  // Nothing commits here on its own; walking away without picking
+  // Replace/Keep-both is a safe, do-nothing abort.
+  const location = useLocation();
+  useEffect(() => {
+    if ((location.state as { autoDownloadDrive?: boolean } | null)?.autoDownloadDrive) {
+      handleDriveDownload();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fresh id — this is landing alongside whatever tanks already exist,
   // never overwriting them by default.
@@ -487,6 +500,25 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
                         You already have a tank named "{existingByName.name}" with different
                         data — replace it, or keep both?
                       </p>
+                      {(() => {
+                        const { shown, overflow } = topImportDiffs(computeImportDiff(existingByName, t));
+                        return shown.length > 0 ? (
+                          <ul className="text-xs text-foam-dim pl-0.5 space-y-1">
+                            {shown.map((d, i) => (
+                              <li key={i}>
+                                • {d.label}
+                                {d.detail && (
+                                  <ul className="pl-4 text-foam-dim/70">
+                                    <li>- Old: {d.detail.old}</li>
+                                    <li>- New: {d.detail.new}</li>
+                                  </ul>
+                                )}
+                              </li>
+                            ))}
+                            {overflow > 0 && <li className="text-foam-dim/60">and {overflow} more…</li>}
+                          </ul>
+                        ) : null;
+                      })()}
                       <div className="flex gap-2">
                         <button
                           onClick={() => replaceExisting(t, existingByName.id)}

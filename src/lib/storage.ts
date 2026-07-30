@@ -104,6 +104,139 @@ export function tankContentKey(tank: Tank): string {
   return JSON.stringify(rest);
 }
 
+export type ImportDiffTier = 'high' | 'medium' | 'low';
+export interface ImportDiffEntry {
+  tier: ImportDiffTier;
+  label: string;
+  // Set for "same count, different content" cases — the first item pair
+  // that actually differs, shown as a rough before/after. Deliberately
+  // doesn't try to pinpoint *which* field changed on that item (that's a
+  // much bigger diffing problem) — just proves something in this category
+  // changed and gives one concrete example, using whichever field a
+  // person would recognize the item by.
+  detail?: { old: string; new: string };
+}
+
+// Finds the first index where two same-length arrays actually differ, and
+// returns a human-readable snapshot of that one item using `getLabel`.
+// Comparing by index rather than matching items up "properly" is a
+// deliberate simplification — good enough for "here's roughly what
+// changed," not meant to be a precise diff.
+function firstItemSnapshot<T>(
+  existingArr: T[],
+  incomingArr: T[],
+  getLabel: (item: T) => string
+): { old: string; new: string } | undefined {
+  const len = Math.min(existingArr.length, incomingArr.length);
+  for (let i = 0; i < len; i++) {
+    if (JSON.stringify(existingArr[i]) !== JSON.stringify(incomingArr[i])) {
+      return { old: getLabel(existingArr[i]), new: getLabel(incomingArr[i]) };
+    }
+  }
+  return undefined;
+}
+
+// Compares an existing tank against an incoming (imported/Drive-downloaded)
+// tank with the same name, and describes what actually differs — not just
+// "these don't match." Tiered by how much a user would actually mind
+// losing it: real logged content (especially photos, which can't be
+// reconstructed) ranks highest; cosmetic fields like name/style rank
+// lowest, since those are the most likely to just be truncation noise
+// (see NAME_MAX_LENGTH/STYLE_MAX_LENGTH clamping in normalizeTank) rather
+// than a meaningful difference.
+export function computeImportDiff(existing: Tank, incoming: Tank): ImportDiffEntry[] {
+  const diffs: ImportDiffEntry[] = [];
+  const versus = (existingN: number, incomingN: number, word: string) => {
+    const delta = incomingN - existingN;
+    return delta > 0
+      ? `Incoming has ${Math.abs(delta)} more ${word}${Math.abs(delta) === 1 ? '' : 's'}`
+      : `Your version has ${Math.abs(delta)} more ${word}${Math.abs(delta) === 1 ? '' : 's'}`;
+  };
+
+  // --- High: logged content, especially photos ---
+  const photoCount = (t: Tank) => t.logs.reduce((n, l) => n + (l.photoUrls?.length ?? 0), 0);
+  const existingPhotos = photoCount(existing);
+  const incomingPhotos = photoCount(incoming);
+  if (existingPhotos !== incomingPhotos) {
+    diffs.push({ tier: 'high', label: `${versus(existingPhotos, incomingPhotos, 'log photo')}` });
+  }
+  if (existing.logs.length !== incoming.logs.length) {
+    diffs.push({ tier: 'high', label: versus(existing.logs.length, incoming.logs.length, 'log entry') });
+  } else if (JSON.stringify(existing.logs) !== JSON.stringify(incoming.logs)) {
+    diffs.push({
+      tier: 'high',
+      label: 'Log entries have different content (same count)',
+      detail: firstItemSnapshot(existing.logs, incoming.logs, (l) => l.title || l.weekLabel || 'entry'),
+    });
+  }
+
+  if (existing.roster.length !== incoming.roster.length) {
+    diffs.push({ tier: 'high', label: versus(existing.roster.length, incoming.roster.length, 'roster item') });
+  } else if (JSON.stringify(existing.roster) !== JSON.stringify(incoming.roster)) {
+    diffs.push({
+      tier: 'high',
+      label: 'Roster items have different content (same count)',
+      detail: firstItemSnapshot(existing.roster, incoming.roster, (r) => r.name),
+    });
+  }
+
+  const doneCount = (t: Tank) => t.checklist.filter((c) => c.done).length;
+  if (existing.checklist.length !== incoming.checklist.length) {
+    diffs.push({ tier: 'high', label: versus(existing.checklist.length, incoming.checklist.length, 'checklist step') });
+  } else if (doneCount(existing) !== doneCount(incoming)) {
+    diffs.push({
+      tier: 'high',
+      label: `Checklist progress differs (${doneCount(existing)} vs ${doneCount(incoming)} steps done)`,
+    });
+  }
+
+  // --- Medium: structural, but not irreplaceable content ---
+  if (existing.schedule.length !== incoming.schedule.length) {
+    diffs.push({ tier: 'medium', label: versus(existing.schedule.length, incoming.schedule.length, 'schedule item') });
+  }
+  if (JSON.stringify(existing.customFields) !== JSON.stringify(incoming.customFields)) {
+    diffs.push({ tier: 'medium', label: 'Custom tracking fields differ' });
+  }
+  if (existing.waterType !== incoming.waterType) {
+    diffs.push({ tier: 'medium', label: `Water type differs (${existing.waterType} vs ${incoming.waterType})` });
+  }
+
+  // --- Low: cosmetic — includes the common case of a name/style diff
+  // that's really just NAME_MAX_LENGTH/STYLE_MAX_LENGTH truncation from
+  // an older, pre-clamping backup. Still shown if it's the only real
+  // difference, just never crowds out something more important.
+  if (existing.name !== incoming.name) {
+    diffs.push({ tier: 'low', label: `Name differs ("${existing.name}" vs "${incoming.name}")` });
+  }
+  if (existing.style !== incoming.style) {
+    diffs.push({ tier: 'low', label: 'Style/description differs' });
+  }
+  if (existing.dimensions !== incoming.dimensions) {
+    diffs.push({ tier: 'low', label: 'Dimensions differ' });
+  }
+  if (existing.sizeGallons !== incoming.sizeGallons) {
+    diffs.push({
+      tier: 'low',
+      label: `Tank size differs (${existing.sizeGallons} vs ${incoming.sizeGallons} gal)`,
+    });
+  }
+
+  return diffs;
+}
+
+const DIFF_TIER_ORDER: Record<ImportDiffTier, number> = { high: 0, medium: 1, low: 2 };
+
+// Picks the top `max` diffs by tier (ties keep their original order) and
+// reports the real overflow count — the full list is always computed
+// first, so this is never a guess dressed up as "and more…".
+export function topImportDiffs(
+  diffs: ImportDiffEntry[],
+  max = 3
+): { shown: ImportDiffEntry[]; overflow: number } {
+  const sorted = [...diffs].sort((a, b) => DIFF_TIER_ORDER[a.tier] - DIFF_TIER_ORDER[b.tier]);
+  return { shown: sorted.slice(0, max), overflow: Math.max(0, sorted.length - max) };
+}
+
 export function loadData(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

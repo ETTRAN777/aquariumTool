@@ -4,6 +4,8 @@ import { useData } from '../lib/DataContext';
 import { exportData, serializeBackup } from '../lib/storage';
 import { uploadBackup } from '../lib/googleDrive';
 import Waterline from './Waterline';
+import DrivePickerModal from './DrivePickerModal';
+import ConfirmModal from './ConfirmModal';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -21,6 +23,8 @@ export default function Layout() {
   const { activeTank, data, setActiveTankId } = useData();
   const navigate = useNavigate();
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
 
   async function handleUploadToDrive() {
     setDriveStatus('uploading');
@@ -137,10 +141,10 @@ export default function Layout() {
               Export
             </button>
             <button
-              onClick={handleUploadToDrive}
+              onClick={() => setDrivePickerOpen(true)}
               disabled={driveStatus === 'uploading'}
               className="px-3 py-2 rounded-md text-sm font-medium text-foam-dim hover:text-amber hover:bg-deepwater-2 transition-colors shrink-0 whitespace-nowrap disabled:opacity-60"
-              title="Back up all your data to Google Drive — only happens when you click this, never automatically"
+              title="Optional Google Drive sync — manual, only runs when you choose Upload or Download"
             >
               {driveStatus === 'uploading'
                 ? 'Uploading…'
@@ -148,7 +152,7 @@ export default function Layout() {
                   ? '✓ Uploaded'
                   : driveStatus === 'error'
                     ? '⚠ Failed'
-                    : 'Upload to Drive'}
+                    : 'Google Drive'}
             </button>
             <NavLink
               to="/docs"
@@ -219,6 +223,32 @@ export default function Layout() {
           </a>
         </div>
       </footer>
+
+      <DrivePickerModal
+        open={drivePickerOpen}
+        onUpload={() => {
+          setDrivePickerOpen(false);
+          setUploadConfirmOpen(true);
+        }}
+        onDownload={() => {
+          setDrivePickerOpen(false);
+          navigate('/new-tank', { state: { autoDownloadDrive: true } });
+        }}
+        onCancel={() => setDrivePickerOpen(false)}
+      />
+
+      <ConfirmModal
+        open={uploadConfirmOpen}
+        title="Overwrite your Google Drive backup?"
+        message="This replaces whatever's currently in your Drive backup with this device's data right now. If another device has changes you haven't downloaded yet, they'll be gone from Drive — download from that device first if you're not sure."
+        confirmLabel="Upload and overwrite"
+        danger
+        onConfirm={() => {
+          setUploadConfirmOpen(false);
+          handleUploadToDrive();
+        }}
+        onCancel={() => setUploadConfirmOpen(false)}
+      />
     </div>
   );
 }
