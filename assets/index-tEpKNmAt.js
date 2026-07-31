@@ -187,8 +187,15 @@ they already know.
   already running, which is where most tank-logging tools start. Worth
   leading with when explaining the site to a first-time user (see below):
   it's the thing most distinguishes this from a typical parameter logger.
-- No account, no sign-up, fully client-side — everything lives in the
-  browser's local storage. Nothing is sent to a server.
+- No account, no sign-up, fully client-side by default — everything lives
+  in the browser's local storage. Two narrow, explicit exceptions to
+  "nothing leaves the browser": an optional one-click Google Drive
+  backup/restore that only ever runs when the user clicks it (see
+  Backup / Import below), and lightweight page-view analytics
+  (GoatCounter) — no cookies, no individual or cross-session tracking, no
+  fingerprinting, nothing tied to a person; it only counts how many views
+  each page gets in aggregate. If asked whether the site "tracks" users,
+  this is the honest, complete answer — not "no tracking at all."
 - Multiple tanks per person, switchable from a dropdown in the header.
 - A new tank starts from one of seven templates: Shrimp / Invert Colony,
   Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
@@ -202,14 +209,30 @@ they already know.
 - Landing page for the active tank: quick stats (roster count, checklist
   progress, days since last log entry, upcoming/overdue schedule items)
   and shortcuts into the other pages.
+- "Copy concept image prompt" (two variants — simple and detailed):
+  assembles the tank's real roster data (hardscape, substrate, plants,
+  livestock, style, dimensions) into a ready-to-paste prompt for whatever
+  AI image tool the user already has, so they can visualize a build
+  before buying anything. Same handoff pattern as the Compatibility
+  page's research prompt below — the app never calls an image API
+  itself, it only assembles the prompt from real data. The simple
+  variant deliberately omits each item's free-text \`detail\` field
+  (husbandry/procurement notes, not visual information) to avoid noisy
+  or contradictory prompts; the detailed variant includes it for anyone
+  who wants that extra context anyway.
 
 **Roster**
 - Every physical thing going into the tank — livestock, plants,
   hardscape, substrate, equipment — tracked through a sourcing pipeline:
   idea → wishlist → ordered → arrived → acclimating → established.
-- Cost tracking per item, with a running total that only counts items
-  still at "wishlist" or later (an "idea" doesn't count toward the
-  budget, since it's explicitly undecided).
+- Cost tracking per item, shown as two numbers derived from the same
+  \`cost\` field rather than two separately-entered values: Estimate (every
+  wishlist-or-later item, "idea" excluded since it's undecided) and
+  Actual (the subset of those already at ordered-or-later). Once every
+  budgeted item has reached ordered-or-later, the two numbers are
+  identical and the display collapses to one merged "Total cost" —
+  recomputed fresh each time, so adding a new wishlist item later
+  automatically splits it back into two numbers.
 - Filterable by category and sortable (default add-order, by category,
   or by sourcing status) — display-only controls, no effect on the
   underlying data or the import/export format below.
