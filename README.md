@@ -39,6 +39,11 @@ tracks is fully customizable.
   SPA is invisible to a plain HTTP fetch, so the site ships a genuine
   `noscript` fallback, structured JSON-LD, and a static `/docs.txt`/
   `llms.txt` pair for assistants that read the page without executing JS.
+- **Diagnosed an undocumented Drive API CORS gap** — Google's upload
+  endpoint doesn't return a CORS preflight response allowing `PATCH` from a
+  browser origin, confirmed against other developers hitting the identical
+  error. Sidestepped it with delete-then-recreate instead of update-in-place
+  — same end result, using only methods with reliable CORS support.
 
 ## What it does
 
@@ -55,10 +60,13 @@ tracks is fully customizable.
   Settings
 - **Roster** — every livestock/plant/hardscape item with a sourcing pipeline
   (idea → wishlist → ordered → arrived → acclimating → established). Items
-  still at "idea" don't count toward the running cost estimate, so you can
-  jot down something you're still deciding on without it skewing your
-  budget. Filterable and sortable by category or by how far along each item
-  is
+  still at "idea" don't count toward either cost figure, so you can jot down
+  something you're still deciding on without it skewing anything. Cost shows
+  as two numbers derived from the same field rather than two separate
+  entries — an Estimate (everything wishlist-or-later) and an Actual (the
+  subset already ordered-or-later) — which collapse into one merged "Total
+  cost" once every budgeted item has actually been ordered. Filterable and
+  sortable by category or by how far along each item is
 - **Compatibility** — researched water-parameter target ranges per
   livestock/plant item, automatically intersected into a tank-wide target
   and checked against your most recent logged reading. Mouth Size and Adult
@@ -87,6 +95,19 @@ tracks is fully customizable.
   duplicate is flagged instead of silently cloned; a same-named tank with
   different data (e.g. you logged more since the backup) offers a real
   choice — replace the existing one, or keep both
+- **Optional Google Drive backup** — sign in with your own Google account to
+  back up or restore your data in one click. Both directions are entirely
+  manual — nothing uploads or syncs automatically, ever, so an edit on one
+  device can never silently overwrite a backup from another before you've
+  had a chance to reconcile them. Restoring runs through the exact same
+  smart-import flow as a manual file, and the app can only ever see the
+  single backup file it created itself, never anything else in your Drive.
+- **AI concept image prompts** — a Dashboard button assembles the tank's
+  real roster (hardscape, substrate, plants, livestock, style, dimensions)
+  into a ready-to-paste prompt for whatever AI image tool you already use,
+  so you can visualize a build before buying anything. Same handoff pattern
+  as Compatibility's research prompt — the app never calls an image API
+  itself, only assembles the prompt from real data
 - **AI Quickstart & Import Guide** (`/docs` in the app) — the full site
   context and import schema, written so it can be pasted straight into an
   AI assistant along with a build plan to generate an importable file from
@@ -95,19 +116,29 @@ tracks is fully customizable.
 ## Why it's built this way
 
 This is a static site with **no backend** — everything lives in your
-browser's `localStorage`, nothing is sent to a server, and there's no
-account or login. One-click JSON export/import handles backups and moving
-data between your own devices. This is the single hosted instance at the
-link above — it's not intended to be self-hosted or run as separate
-deployments; if there's something you'd want it to do differently, that's
-what feature requests are for (see below), not a fork.
+browser's `localStorage`, and there's no account or login. One-click JSON
+export/import handles backups and moving data between your own devices.
+This is the single hosted instance at the link above — it's not intended to
+be self-hosted or run as separate deployments; if there's something you'd
+want it to do differently, that's what feature requests are for (see
+below), not a fork.
+
+Two narrow, explicit exceptions to "nothing leaves the browser," worth
+being upfront about rather than just claiming "no tracking":
+- **Google Drive backup** — entirely optional, entirely user-triggered (see
+  Data & backups below).
+- **Page-view analytics** ([GoatCounter](https://www.goatcounter.com/)) —
+  no cookies, no individual or cross-session tracking, no fingerprinting.
+  It only counts how many views each page gets in aggregate, the same way
+  a hit counter would, not who's viewing them.
 
 ## Feedback & feature requests
 
 Have a feature idea, found a bug, or want to see how a build turns out?
-Reach out on [Reddit](https://www.reddit.com/user/Ettran777/) or [Instagram](https://www.instagram.com/ettran.7/).
+Reach out on [Reddit](https://www.reddit.com/user/Ettran777/) or
+[Instagram](https://www.instagram.com/ettran.7/).
 
-Promotional videos and tank jounrey soon.
+Promotional videos and tank journey soon.
 
 ## Stack
 
@@ -116,6 +147,8 @@ Promotional videos and tank jounrey soon.
 - Recharts for parameter trend charts
 - Tailwind CSS v4
 - Vite
+- [GoatCounter](https://www.goatcounter.com/) for privacy-respecting
+  page-view analytics (see above)
 
 ## Data & backups
 
@@ -124,8 +157,11 @@ button in the header regularly — it downloads a timestamped, tank-named JSON
 snapshot of every tank, roster item, checklist, log entry, and custom field
 definition. **Import** (also in the header) takes you to the same smart
 import flow used for adding a new tank — it never silently overwrites your
-existing data. There's no cloud sync, so export before clearing browser data
-or switching devices.
+existing data. There's no automatic cloud sync — Export/Import, or the
+optional one-click Google Drive backup/restore described above, are the only
+ways data moves anywhere, and none of them happen without you clicking
+something. Export (or back up to Drive) before clearing browser data or
+switching devices.
 
 ## License
 
