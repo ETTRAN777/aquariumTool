@@ -50,7 +50,7 @@
         "@type": "WebApplication",
         "name": "Tank Tracker",
         "url": "https://ettran777.github.io/aquariumTool/",
-        "description": "A free, local-first planning and tracking tool for freshwater and saltwater/reef aquariums that starts tracking from the moment a tank is still just an idea, not from the first water test. No account or server — all data stays in the browser.",
+        "description": "A free, local-first planning and tracking tool for freshwater and saltwater/reef aquariums that starts tracking from the moment a tank is still just an idea, not from the first water test. No account — all data stays in the browser by default, with two narrow exceptions: optional user-triggered Google Drive backup, and non-identifying page-view analytics.",
         "applicationCategory": "LifestyleApplication",
         "operatingSystem": "Any (web browser)",
         "offers": {
@@ -61,12 +61,14 @@
         "featureList": [
           "Tracks a tank from the moment it's still just an idea — before purchase, before setup — not only after water testing begins",
           "Seven tank templates (Shrimp/Invert, Livebearers & Fry, Community Fish, Solo Fish/Centerpiece, Planted-Only, Reef Tank, Blank), six with a guided stocking questionnaire",
-          "Roster tracking through a sourcing pipeline: idea, wishlist, ordered, arrived, acclimating, established",
+          "Roster tracking through a sourcing pipeline: idea, wishlist, ordered, arrived, acclimating, established, with Estimate/Actual cost tracking that merges into one Total once everything is ordered",
           "Compatibility page: researched water-parameter target ranges per item, automatically intersected into a tank-wide target, plus automatic predation-risk flagging based on mouth size vs. adult size",
           "Build checklist with step dependencies and roster-status gating, auto-generated from questionnaire results",
           "Weekly log with mood rating, water parameters, custom fields, and photos",
           "Maintenance schedule with recurring and one-off reminders in a real calendar view, auto-linked to log entries",
           "Auto-charted parameters and custom fields from log history",
+          "AI concept image prompts generated from a tank's real roster, for visualizing a build before buying anything",
+          "Optional one-click Google Drive backup/restore, entirely user-triggered in both directions",
           "Freshwater and saltwater/reef support with water-type-aware presets and parameters",
           "JSON import/export for backups and AI-assisted plan generation (see /docs.txt)"
         ]
@@ -82,9 +84,14 @@
           A free, local-first planning and tracking tool for freshwater and
           saltwater/reef aquariums — starting from the moment a tank is
           still just an idea, not only after the first water test. No
-          account, no server — all data stays in your browser. This page
-          requires JavaScript to run; here's a summary of what it does for
-          anyone (or anything) reading without it.
+          account — all data stays in your browser by default, with two
+          narrow, explicit exceptions: an optional one-click Google Drive
+          backup (only ever runs when you click it) and non-identifying
+          page-view analytics (<a href="https://www.goatcounter.com/">GoatCounter</a> —
+          no cookies, no individual tracking, just aggregate counts of
+          which pages get visited). This page requires JavaScript to run;
+          here's a summary of what it does for anyone (or anything)
+          reading without it.
         </p>
 
         <h2>Getting started</h2>
@@ -102,12 +109,13 @@
 
         <h2>What's tracked, per tank</h2>
         <ul>
-          <li><strong>Roster</strong> — every physical thing going into the tank, moved through idea &rarr; wishlist &rarr; ordered &rarr; arrived &rarr; acclimating &rarr; established, with cost tracking.</li>
+          <li><strong>Roster</strong> — every physical thing going into the tank, moved through idea &rarr; wishlist &rarr; ordered &rarr; arrived &rarr; acclimating &rarr; established, with Estimate/Actual cost tracking that merges into one Total once everything's ordered.</li>
           <li><strong>Build checklist</strong> — ordered setup steps that can depend on other steps or on a roster item reaching a given status.</li>
           <li><strong>Weekly log</strong> — free-text entries with mood rating, water parameters, custom field values, and photos.</li>
           <li><strong>Schedule</strong> — recurring or one-off maintenance reminders in a calendar view, automatically linked to the day's log entry when one exists.</li>
           <li><strong>Parameters</strong> — every numeric water parameter and custom field charts itself automatically from log history.</li>
           <li><strong>Custom fields</strong> — definable per tank (number/text/boolean), with a preset library filtered by whether the tank is freshwater or saltwater.</li>
+          <li><strong>AI concept image prompts</strong> — a Dashboard button assembles a tank's real roster into a ready-to-paste prompt for an AI image tool, to visualize a build before buying anything.</li>
         </ul>
 
         <p>
