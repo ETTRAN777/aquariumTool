@@ -1,6 +1,6 @@
-import type { AppData, Tank, CustomFieldDef } from '../types';
+import type { AppData, Tank, CustomFieldDef, RosterItem } from '../types';
 import { seedData } from '../data/seed';
-import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH } from './constants';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, STATUS_LABELS } from './constants';
 
 const STORAGE_KEY = 'tank-tracker:data:v1';
 
@@ -136,6 +136,50 @@ function firstItemSnapshot<T>(
   return undefined;
 }
 
+// Roster-specific version of the above — name is still the first choice
+// (most recognizable), but falls back to status or cost when the name is
+// identical on both sides, since those are the fields most likely to be
+// the real, currently-invisible change: an item progressing through its
+// sourcing pipeline, or an estimate becoming a real price. Doesn't try to
+// be exhaustive about every possible field (quantity, detail, targets,
+// traits) — just the two most common real-world cases, same "first diff
+// of the category, doesn't need to get it right" scoping as everywhere
+// else in this file.
+function firstRosterSnapshot(
+  existingArr: RosterItem[],
+  incomingArr: RosterItem[]
+): { old: string; new: string } | undefined {
+  const len = Math.min(existingArr.length, incomingArr.length);
+  const fmtCost = (c?: number) => (c !== undefined ? `$${c.toFixed(2)}` : 'no cost set');
+
+  for (let i = 0; i < len; i++) {
+    const a = existingArr[i];
+    const b = incomingArr[i];
+    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+
+    if (a.name !== b.name) {
+      return { old: a.name, new: b.name };
+    }
+    if (a.status !== b.status) {
+      return {
+        old: `${a.name} — status: ${STATUS_LABELS[a.status]}`,
+        new: `${b.name} — status: ${STATUS_LABELS[b.status]}`,
+      };
+    }
+    if (a.cost !== b.cost) {
+      return {
+        old: `${a.name} — cost: ${fmtCost(a.cost)}`,
+        new: `${b.name} — cost: ${fmtCost(b.cost)}`,
+      };
+    }
+    // Something else differs with no dedicated fallback yet — still show
+    // the name pair so it's clear which item to look at, even though it
+    // reads as unchanged.
+    return { old: a.name, new: b.name };
+  }
+  return undefined;
+}
+
 // Compares an existing tank against an incoming (imported/Drive-downloaded)
 // tank with the same name, and describes what actually differs — not just
 // "these don't match." Tiered by how much a user would actually mind
@@ -176,7 +220,7 @@ export function computeImportDiff(existing: Tank, incoming: Tank): ImportDiffEnt
     diffs.push({
       tier: 'high',
       label: 'Roster items have different content (same count)',
-      detail: firstItemSnapshot(existing.roster, incoming.roster, (r) => r.name),
+      detail: firstRosterSnapshot(existing.roster, incoming.roster),
     });
   }
 

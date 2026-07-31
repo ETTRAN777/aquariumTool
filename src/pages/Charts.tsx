@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -24,8 +25,18 @@ const COLORS = {
 // Cycled through for however many numeric custom fields a tank defines.
 const CUSTOM_FIELD_COLORS = ['#E8A23D', '#5C8A6C', '#C9A876', '#B85C4A', '#3F6B4F', '#EDF3EE'];
 
+// Can't zoom in past this many entries — a single point with nothing
+// around it to compare against isn't a useful "zoomed in" view.
+const MIN_VISIBLE_ENTRIES = 7;
+
 export default function Charts() {
   const { activeTank } = useData();
+  // Null = full history (today's default behavior, unchanged). Desktop-only
+  // by construction, not by a breakpoint check — Ctrl+scroll simply never
+  // fires from a touch gesture, so this never activates on mobile without
+  // needing to explicitly disable anything there.
+  const [zoomRange, setZoomRange] = useState<[number, number] | null>(null);
+
   if (!activeTank) return null;
 
   const logs = [...activeTank.logs].reverse(); // chronological order
@@ -78,6 +89,57 @@ export default function Charts() {
   const formatIndexAsDate = (i: number) => (chartData[i]?.date as string) ?? '';
   const allIndices = chartData.map((_, i) => i);
 
+  // Shared visible window — every chart reads from this same pair, so one
+  // scroll gesture on any single chart zooms all of them together, never
+  // independently. Clamped against the *current* chartData length each
+  // render, not just at the moment a zoom was set, so a zoom range doesn't
+  // end up stale/out-of-bounds if a log entry gets added or removed while
+  // zoomed in.
+  const fullEnd = Math.max(chartData.length - 1, 0);
+  const [rawStart, rawEnd] = zoomRange ?? [0, fullEnd];
+  const visStart = Math.max(0, Math.min(rawStart, fullEnd));
+  const visEnd = Math.max(visStart, Math.min(rawEnd, fullEnd));
+  const visIndices = allIndices.filter((i) => i >= visStart && i <= visEnd);
+  const isZoomed = zoomRange !== null && (visStart > 0 || visEnd < fullEnd);
+
+  // Ctrl+scroll to zoom (also what a Mac trackpad pinch gesture reports
+  // natively) — deliberately NOT a plain wheel handler, which would hijack
+  // ordinary page-scrolling the instant the cursor passes over any chart
+  // while scrolling down the page. Plain scroll stays untouched.
+  function handleWheel(e: WheelEvent) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const curWidth = visEnd - visStart;
+    const cursorIndex = visStart + fraction * curWidth;
+
+    // Scrolling up (deltaY < 0) zooms in; down zooms out.
+    const zoomFactor = e.deltaY < 0 ? 0.85 : 1 / 0.85;
+    const newWidth = Math.max(
+      MIN_VISIBLE_ENTRIES - 1,
+      Math.min(fullEnd, curWidth * zoomFactor)
+    );
+
+    let newStart = cursorIndex - fraction * newWidth;
+    let newEnd = newStart + newWidth;
+    if (newStart < 0) {
+      newEnd -= newStart;
+      newStart = 0;
+    }
+    if (newEnd > fullEnd) {
+      newStart -= newEnd - fullEnd;
+      newEnd = fullEnd;
+    }
+    newStart = Math.max(0, newStart);
+
+    // Zoomed all the way back out — return to null rather than an
+    // explicit [0, fullEnd], so a later log entry still extends the
+    // default view instead of leaving it pinned to a now-stale end index.
+    setZoomRange(newWidth >= fullEnd ? null : [Math.round(newStart), Math.round(newEnd)]);
+  }
+
   // Each chart checks only the fields it actually plots, so logging just
   // temperature (say) doesn't leave the Nitrogen or pH/TDS cards rendering
   // mostly-empty — they simply don't show until they have their own data.
@@ -117,20 +179,35 @@ export default function Charts() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-10">
-      <div>
-        <h2 className="font-display text-2xl font-semibold">Parameters over time</h2>
-        <p className="text-sm text-foam-dim">Tracking the cycle and stability, week by week.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Parameters over time</h2>
+          <p className="text-sm text-foam-dim">Tracking the cycle and stability, week by week.</p>
+        </div>
+        <div className="hidden md:flex items-center gap-2 text-xs text-foam-dim font-mono">
+          {isZoomed ? (
+            <>
+              <span>Zoomed to {visEnd - visStart + 1} entries</span>
+              <button onClick={() => setZoomRange(null)} className="text-amber hover:underline">
+                Reset zoom
+              </button>
+            </>
+          ) : (
+            <span className="text-foam-dim/60">Ctrl+scroll on a chart to zoom</span>
+          )}
+        </div>
       </div>
 
       {hasNitrogenData && (
-        <ChartCard title="Nitrogen cycle (ppm)">
+        <ChartCard title="Nitrogen cycle (ppm)" onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -146,14 +223,15 @@ export default function Charts() {
       )}
 
       {hasPhTdsData && (
-        <ChartCard title={isSaltwater ? 'pH & Salinity' : 'pH & TDS'}>
+        <ChartCard title={isSaltwater ? 'pH & Salinity' : 'pH & TDS'} onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -172,14 +250,15 @@ export default function Charts() {
       )}
 
       {hasTemperatureData && (
-        <ChartCard title="Temperature (°F)">
+        <ChartCard title="Temperature (°F)" onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -192,14 +271,15 @@ export default function Charts() {
       )}
 
       {hasMoodData && (
-        <ChartCard title="Tank status over time">
+        <ChartCard title="Tank status over time" onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -228,14 +308,15 @@ export default function Charts() {
       )}
 
       {chartedBooleanFields.length > 0 && (
-        <ChartCard title="Yes / No tracking">
+        <ChartCard title="Yes / No tracking" onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -268,14 +349,15 @@ export default function Charts() {
       )}
 
       {hasCustomData && (
-        <ChartCard title="Tracked counts">
+        <ChartCard title="Tracked counts" onWheel={handleWheel}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#3F6B4F33" />
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, Math.max(chartData.length - 1, 0)]}
-              ticks={allIndices}
+              domain={[visStart, visEnd]}
+              allowDataOverflow
+              ticks={visIndices}
               tickFormatter={formatIndexAsDate}
               stroke="#C9D6CE"
               fontSize={11}
@@ -303,9 +385,32 @@ export default function Charts() {
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {
+function ChartCard({
+  title,
+  onWheel,
+  children,
+}: {
+  title: string;
+  onWheel: (e: WheelEvent) => void;
+  children: React.ReactElement;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // React's onWheel prop attaches as a passive listener by default (a
+    // browser-level default since Chrome 56, not a React choice) — inside
+    // a passive listener, preventDefault() is silently ignored, so
+    // Ctrl+scroll would still trigger the browser's native page-zoom
+    // alongside our chart zoom. A manually-attached, explicitly
+    // non-passive native listener is the only way to actually stop that.
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [onWheel]);
+
   return (
-    <div className="card p-5">
+    <div className="card p-5" ref={ref}>
       <h3 className="font-display text-lg font-semibold mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={260}>
         {children}
