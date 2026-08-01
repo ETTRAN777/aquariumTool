@@ -110,7 +110,15 @@ export default function Charts() {
     if (!e.ctrlKey) return;
     e.preventDefault();
 
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    // The grid background rect (tried previously) never renders unless a
+    // `fill` prop is passed to <CartesianGrid> — confirmed by reading the
+    // actual installed recharts source, not assumed. We don't pass fill,
+    // so that element never existed in our DOM; the earlier fix was a
+    // silent no-op. The XAxis's own axis line renders unconditionally and
+    // spans exactly the true plot width, so it's a reliable anchor instead.
+    const cardEl = e.currentTarget as HTMLDivElement;
+    const axisLine = cardEl.querySelector('.recharts-xAxis .recharts-cartesian-axis-line');
+    const rect = (axisLine ?? cardEl).getBoundingClientRect();
     const fraction = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     const curWidth = visEnd - visStart;
     const cursorIndex = visStart + fraction * curWidth;
@@ -187,7 +195,10 @@ export default function Charts() {
         <div className="hidden md:flex items-center gap-2 text-xs text-foam-dim font-mono">
           {isZoomed ? (
             <>
-              <span>Zoomed to {visEnd - visStart + 1} entries</span>
+              <span>
+                Zoomed to {visEnd - visStart + 1} entries — index {visStart}–{visEnd} (
+                {formatIndexAsDate(visStart)} to {formatIndexAsDate(visEnd)})
+              </span>
               <button onClick={() => setZoomRange(null)} className="text-amber hover:underline">
                 Reset zoom
               </button>

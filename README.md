@@ -31,6 +31,16 @@ tracks is fully customizable.
   pre-instantiated React element instead of a component reference to
   Recharts' `Tooltip`, another from an axis keyed on a non-unique display
   string causing hover lookups to collide.
+- **Custom Recharts wheel-zoom for the Parameters charts**, cursor-centered
+  and shared across all charts at once — building it surfaced a real lesson
+  in not trusting stale documentation: an initial fix for off-center
+  zooming was based on a search result that happened to hit Recharts'
+  v2.x source, silently doing nothing against the v3.x actually installed.
+  Reading the real shipped source directly found the actual cause — the
+  grid background element it depended on is conditionally rendered behind
+  a `fill` prop this app never sets — and pointed to the axis line as a
+  reliable anchor instead, confirmed against the real DOM rather than
+  assumed a second time.
 - **Structural diffing for smart data import** — deduplicates imported tanks
   by comparing serialized content (excluding volatile IDs) against existing
   data, distinguishing an exact duplicate from a same-named-but-modified
@@ -94,7 +104,24 @@ tracks is fully customizable.
   what you already have. A genuinely new tank imports normally; an exact
   duplicate is flagged instead of silently cloned; a same-named tank with
   different data (e.g. you logged more since the backup) offers a real
-  choice — replace the existing one, or keep both
+  choice — replace the existing one, or keep both — with a diff showing
+  roughly what's changed, prioritized toward the changes that'd actually
+  matter to lose (log entries, roster items) over cosmetic ones (name,
+  style). If the file being imported has no log photos but your current
+  version does, Replace keeps your existing photos rather than clearing
+  them — this matters specifically for the export-without-images workflow
+  below, so an AI-assisted edit can never accidentally wipe out real
+  photos just because the file it worked from never had any.
+- **Export, with an image-free option** — the header's Export button opens
+  a picker: all tanks, just the active one, or a specific selection, each
+  with an optional "exclude photos" toggle. **If you're handing a backup to
+  an AI assistant to review or edit** (e.g. syncing a tank's plan against an
+  updated build doc), use the image-free export — embedded log photos are
+  usually the overwhelming majority of a backup's size and cost real, often
+  substantial usage for zero analytical value, since the assistant doesn't
+  need to see them to work with the structural data. The exported file is
+  still fully valid and re-importable either way; nothing else about the
+  data changes.
 - **Optional Google Drive backup** — sign in with your own Google account to
   back up or restore your data in one click. Both directions are entirely
   manual — nothing uploads or syncs automatically, ever, so an edit on one
@@ -153,15 +180,24 @@ Promotional videos and tank journey soon.
 ## Data & backups
 
 Everything is stored in your browser's `localStorage`. Use the **Export**
-button in the header regularly — it downloads a timestamped, tank-named JSON
-snapshot of every tank, roster item, checklist, log entry, and custom field
-definition. **Import** (also in the header) takes you to the same smart
+button in the header regularly — it opens a picker (all tanks, just the
+active one, or a specific selection) and downloads a timestamped JSON
+snapshot. **Import** (also in the header) takes you to the same smart
 import flow used for adding a new tank — it never silently overwrites your
-existing data. There's no automatic cloud sync — Export/Import, or the
-optional one-click Google Drive backup/restore described above, are the only
-ways data moves anywhere, and none of them happen without you clicking
-something. Export (or back up to Drive) before clearing browser data or
-switching devices.
+existing data, and never clears existing log photos just because an
+imported file doesn't have any. There's no automatic cloud sync —
+Export/Import, or the optional one-click Google Drive backup/restore
+described above, are the only ways data moves anywhere, and none of them
+happen without you clicking something. Export (or back up to Drive) before
+clearing browser data or switching devices.
+
+**Handing a backup to an AI assistant?** Use the "exclude photos" toggle in
+the export picker first. Log photos are typically the large majority of a
+backup file's size, and cost real usage for an assistant to read through
+for no analytical benefit — a tank with even a handful of photographed
+logs can turn a quick structural review into a file that eats a meaningful
+chunk of a usage window before any actual work happens. The image-free
+export is still a fully valid, re-importable backup on its own.
 
 ## License
 

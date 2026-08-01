@@ -16,11 +16,12 @@ export default function ExportPickerModal({
   open: boolean;
   tanks: Tank[];
   activeTank: Tank;
-  onExport: (tanks: Tank[]) => void;
+  onExport: (tanks: Tank[], stripImages: boolean) => void;
   onCancel: () => void;
 }) {
   const [chooseOpen, setChooseOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [stripImages, setStripImages] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -49,10 +50,10 @@ export default function ExportPickerModal({
           Export backup
         </h2>
         <div className="flex flex-col gap-2">
-          <button onClick={() => onExport(tanks)} className="btn btn-primary text-left">
+          <button onClick={() => onExport(tanks, stripImages)} className="btn btn-primary text-left">
             All tanks ({tanks.length})
           </button>
-          <button onClick={() => onExport([activeTank])} className="btn btn-secondary text-left">
+          <button onClick={() => onExport([activeTank], stripImages)} className="btn btn-secondary text-left">
             Just "{activeTank.name}"
           </button>
 
@@ -83,7 +84,7 @@ export default function ExportPickerModal({
                 ))}
               </div>
               <button
-                onClick={() => onExport(tanks.filter((t) => selectedIds.includes(t.id)))}
+                onClick={() => onExport(tanks.filter((t) => selectedIds.includes(t.id)), stripImages)}
                 disabled={selectedIds.length === 0}
                 className="btn btn-secondary text-xs w-full disabled:opacity-50"
               >
@@ -91,6 +92,17 @@ export default function ExportPickerModal({
               </button>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setStripImages((s) => !s)}
+            className="text-xs text-amber hover:underline text-left"
+            title="Log photos are almost always the bulk of a backup's size — leaving them out keeps the file small for pasting into an AI assistant, without losing anything else. Still a fully valid backup either way."
+          >
+            {stripImages
+              ? '📷 Photos excluded — smaller file, AI-friendly'
+              : '📷 Include photos (larger file)'}
+          </button>
 
           <button onClick={onCancel} className="btn btn-ghost text-xs mt-1">
             Cancel

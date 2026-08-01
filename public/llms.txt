@@ -15,6 +15,7 @@
 ## For AI assistants
 
 - [AI Quickstart & Import Guide](https://ettran777.github.io/aquariumTool/docs.txt): The authoritative reference for an AI assistant helping with this app — full feature context across every page, the JSON import schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf. (This is a plain static mirror of the in-app /docs page — the app itself uses hash-based routing, so /docs by itself isn't reachable by a plain fetch; this .txt file is.)
+- **If a user gives you a full backup export to review or edit**, check for embedded log photos (base64 data URIs on `LogEntry.photoUrls`) before reading further — these are usually the large majority of the file's size and cost real usage for no analytical benefit. If present and not actually needed for the task, tell the user to re-export using the app's "exclude photos" toggle instead; it's still a fully valid, re-importable backup, just far smaller. Re-importing an image-free edit back into the app won't lose the user's existing photos either way — the app restores them from the current version automatically on replace.
 
 ## Site
 

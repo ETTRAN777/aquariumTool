@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
-import { exportData, serializeBackup } from '../lib/storage';
+import { exportData, serializeBackup, stripPhotos } from '../lib/storage';
 import { uploadBackup } from '../lib/googleDrive';
 import Waterline from './Waterline';
 import DrivePickerModal from './DrivePickerModal';
@@ -28,18 +28,19 @@ export default function Layout() {
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
 
-  function handleExport(selectedTanks: Tank[]) {
+  function handleExport(selectedTanks: Tank[], stripImages: boolean) {
     // Single-tank export gets named for that tank, same as before — but
     // now the content genuinely matches the filename, since previously
     // "Export" always included every tank regardless of the name prefix.
     // Anything else (all tanks, or an arbitrary multi-selection) gets a
     // neutral filename rather than implying a scope that isn't accurate.
+    const tanksToExport = stripImages ? stripPhotos(selectedTanks) : selectedTanks;
     const payload: AppData = {
-      activeTankId: selectedTanks[0]?.id ?? '',
-      tanks: selectedTanks,
+      activeTankId: tanksToExport[0]?.id ?? '',
+      tanks: tanksToExport,
     };
-    const name = selectedTanks.length === 1 ? selectedTanks[0].name : undefined;
-    exportData(payload, name);
+    const name = tanksToExport.length === 1 ? tanksToExport[0].name : undefined;
+    exportData(payload, name, stripImages);
     setExportPickerOpen(false);
   }
 

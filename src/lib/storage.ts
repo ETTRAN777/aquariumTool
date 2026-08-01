@@ -104,6 +104,58 @@ export function tankContentKey(tank: Tank): string {
   return JSON.stringify(rest);
 }
 
+// Strips log photos from a copy of the given tanks — for the "no images"
+// export option. Photos are almost always the overwhelming majority of a
+// backup file's size, and are pure dead weight for anyone pasting a backup
+// into an AI assistant to sync a build plan against — a task that only
+// needs the structural data, but otherwise pays for every embedded photo's
+// base64 bytes in tokens. Still a fully valid, re-importable backup on its
+// own — photoUrls has always been an optional field.
+export function stripPhotos(tanks: Tank[]): Tank[] {
+  return tanks.map((t) => ({
+    ...t,
+    logs: t.logs.map((l) => {
+      const { photoUrls, ...rest } = l;
+      return rest;
+    }),
+  }));
+}
+
+// Restores log photos onto an incoming (imported) tank from the existing
+// stored version, for any log entry present in both (matched by id) where
+// the incoming version has none. Exists specifically because of
+// stripPhotos()/the "no images" export — a plan sync built from that
+// export has no photos on any log by construction, and a naive replace
+// would silently wipe out real photos already sitting on the current
+// version of those same entries. Only fills in gaps; never overwrites
+// photos the incoming version actually specifies itself.
+export function restoreMissingPhotos(incoming: Tank, existing: Tank): Tank {
+  const existingLogById = new Map(existing.logs.map((l) => [l.id, l]));
+  return {
+    ...incoming,
+    logs: incoming.logs.map((l) => {
+      if (l.photoUrls && l.photoUrls.length > 0) return l;
+      const match = existingLogById.get(l.id);
+      if (match?.photoUrls && match.photoUrls.length > 0) {
+        return { ...l, photoUrls: match.photoUrls };
+      }
+      return l;
+    }),
+  };
+}
+
+// Whether restoreMissingPhotos would actually change anything — used to
+// show an honest note before the user commits to Replace, rather than
+// having photos reappear silently with no explanation.
+export function wouldRestorePhotos(incoming: Tank, existing: Tank): boolean {
+  const existingLogById = new Map(existing.logs.map((l) => [l.id, l]));
+  return incoming.logs.some((l) => {
+    if (l.photoUrls && l.photoUrls.length > 0) return false;
+    const match = existingLogById.get(l.id);
+    return !!(match?.photoUrls && match.photoUrls.length > 0);
+  });
+}
+
 export type ImportDiffTier = 'high' | 'medium' | 'low';
 export interface ImportDiffEntry {
   tier: ImportDiffTier;
@@ -314,7 +366,7 @@ export function serializeBackup(data: AppData): string {
   return JSON.stringify(data, null, 2);
 }
 
-export function exportData(data: AppData, activeTankName?: string): void {
+export function exportData(data: AppData, activeTankName?: string, noImages?: boolean): void {
   const blob = new Blob([serializeBackup(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -323,8 +375,9 @@ export function exportData(data: AppData, activeTankName?: string): void {
   // exporting multiple tanks on the same day doesn't produce identically-
   // named files — the export itself still always contains every tank.
   const prefix = activeTankName ? `${slugify(activeTankName)}-` : '';
+  const suffix = noImages ? '-no-images' : '';
   a.href = url;
-  a.download = `${prefix}tank-tracker-backup-${date}.json`;
+  a.download = `${prefix}tank-tracker-backup${suffix}-${date}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

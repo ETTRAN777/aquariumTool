@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { TANK_TEMPLATES, buildTankFromTemplate, type TankTemplate } from '../data/templates';
-import { importData, parseBackupJson, tankContentKey, computeImportDiff, topImportDiffs } from '../lib/storage';
+import { importData, parseBackupJson, tankContentKey, computeImportDiff, topImportDiffs, restoreMissingPhotos, wouldRestorePhotos } from '../lib/storage';
 import { downloadBackup } from '../lib/googleDrive';
 import TankQuestionnaire from '../components/TankQuestionnaire';
 import type { Tank, RecommendedRosterItem } from '../types';
@@ -188,8 +188,8 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
     onDone?.();
   }
 
-  function replaceExisting(imported: Tank, existingId: string) {
-    updateTank({ ...imported, id: existingId });
+  function replaceExisting(imported: Tank, existing: Tank) {
+    updateTank({ ...restoreMissingPhotos(imported, existing), id: existing.id });
     onDone?.();
   }
 
@@ -519,9 +519,15 @@ export default function CreateTank({ onDone }: { onDone?: () => void }) {
                           </ul>
                         ) : null;
                       })()}
+                      {wouldRestorePhotos(t, existingByName) && (
+                        <p className="text-xs text-amber pl-0.5">
+                          📷 This import has no log photos — Replace will keep the photos already on
+                          your current logs rather than clearing them.
+                        </p>
+                      )}
                       <div className="flex gap-2">
                         <button
-                          onClick={() => replaceExisting(t, existingByName.id)}
+                          onClick={() => replaceExisting(t, existingByName)}
                           className="btn btn-secondary text-xs"
                         >
                           Replace existing
