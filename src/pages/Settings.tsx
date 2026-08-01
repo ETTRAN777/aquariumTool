@@ -20,6 +20,8 @@ export default function Settings() {
   const [name, setName] = useState(activeTank?.name ?? '');
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons.toString() ?? '');
   const [dimensions, setDimensions] = useState(activeTank?.dimensions ?? '');
+  const [lengthIn, setLengthIn] = useState(activeTank?.lengthIn?.toString() ?? '');
+  const [widthIn, setWidthIn] = useState(activeTank?.widthIn?.toString() ?? '');
   const [style, setStyle] = useState(activeTank?.style ?? '');
   const [waterType, setWaterType] = useState<'freshwater' | 'saltwater'>(
     activeTank?.waterType ?? 'freshwater'
@@ -40,6 +42,8 @@ export default function Settings() {
       name: name.trim(),
       sizeGallons: resolvedGallons,
       dimensions: dimensions.trim() || closestStandardDimensions(resolvedGallons),
+      lengthIn: lengthIn.trim() ? Number(lengthIn) : undefined,
+      widthIn: widthIn.trim() ? Number(widthIn) : undefined,
       style: style.trim() || undefined,
       waterType,
     });
@@ -147,6 +151,31 @@ export default function Settings() {
             )}
           </div>
         </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="field-label">Length (in, optional)</label>
+            <input
+              type="number"
+              value={lengthIn}
+              onChange={(e) => setLengthIn(e.target.value)}
+              className="field"
+            />
+          </div>
+          <div>
+            <label className="field-label">Width (in, optional)</label>
+            <input
+              type="number"
+              value={widthIn}
+              onChange={(e) => setWidthIn(e.target.value)}
+              className="field"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-foam-dim/70 -mt-2">
+          Length/Width power the Compatibility page's minimum-tank-size check
+          — separate from the free-text Dimensions above, since that can't be
+          compared against a researched number.
+        </p>
         <div>
           <label className="field-label">Water type</label>
           <select
@@ -159,7 +188,7 @@ export default function Settings() {
           </select>
           <p className="text-[11px] text-foam-dim/60 mt-1">
             Controls which preset tracking fields show up below, and whether salinity appears
-            on the Weekly Log and Parameters pages.
+            on the Log and Parameters pages.
           </p>
         </div>
         <button type="submit" className="btn btn-secondary">
@@ -171,7 +200,7 @@ export default function Settings() {
         <div>
           <p className="field-label">Custom tracking fields</p>
           <p className="text-xs text-foam-dim">
-            These show up as inputs on every Weekly Log entry, and numeric ones get charted
+            These show up as inputs on every Log entry, and numeric ones get charted
             on the Parameters page automatically.
           </p>
         </div>

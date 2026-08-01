@@ -1,6 +1,6 @@
 import type { AppData, Tank, CustomFieldDef, RosterItem } from '../types';
 import { seedData } from '../data/seed';
-import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, STATUS_LABELS } from './constants';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, STATUS_LABELS, MOOD_ORDER } from './constants';
 
 const STORAGE_KEY = 'tank-tracker:data:v1';
 
@@ -47,6 +47,30 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
   // those limits exist to prevent (see the comment on the constants) —
   // with a warning surfaced back to the caller rather than a silent cut,
   // so an import doesn't quietly change something the user wrote.
+  // TypeScript's Mood union type only constrains code that goes through
+  // the type system — a raw JSON.parse() of an imported file has no such
+  // guarantee, so an invalid value here (from a hand-edited file, or an
+  // AI-generated one that didn't follow the schema) would otherwise be
+  // silently accepted and stored. Downstream code degrades gracefully
+  // either way (moodToScore() already returns undefined for anything
+  // unrecognized), but that's not the same as the user ever being told
+  // something in their import didn't match what the field actually
+  // allows — same reasoning as the name/style clamping above.
+  let invalidMoodCount = 0;
+  logs = logs.map((l: any) => {
+    if (l.mood !== undefined && !MOOD_ORDER.includes(l.mood)) {
+      invalidMoodCount++;
+      const { mood, ...rest } = l;
+      return rest;
+    }
+    return l;
+  });
+  if (invalidMoodCount > 0) {
+    warnings.push(
+      `${invalidMoodCount} log ${invalidMoodCount === 1 ? 'entry has' : 'entries have'} a mood value that isn't one of the app's four options — cleared rather than kept as something the UI can't actually display.`
+    );
+  }
+
   let name = raw.name;
   if (typeof raw.name === 'string' && raw.name.length > NAME_MAX_LENGTH) {
     name = raw.name.slice(0, NAME_MAX_LENGTH);

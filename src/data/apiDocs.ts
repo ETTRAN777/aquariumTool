@@ -166,7 +166,9 @@ they already know.
 - Per livestock/plant roster item: optional researched water-parameter
   target ranges, plus dedicated Mouth Size (mm) and Adult Size (in)
   fields for livestock, plus free-form traits (temperament, fin-nipper,
-  light needs, growth rate, etc. — presets offered, or fully custom).
+  long/flowing fins, min group size, min tank length/width, eats/uproots
+  plants, light needs, growth rate, etc. — presets offered, or fully
+  custom).
 - The tank-wide target for each water parameter is computed automatically
   as the intersection of every item's own range — the tightest min and
   the tightest max across everything in the roster. If two items'
@@ -185,11 +187,38 @@ they already know.
   expandable to the specific list of what it endangers. A per-item
   override excludes a false positive (e.g. Otocinclus) from the check
   entirely.
+- Four more checks run the same way — silent unless the relevant trait(s)
+  are actually set, never inferred or defaulted:
+  - **Fin-nipping risk** — pairwise, same shape as predation: any item
+    with Fin Nipper = true flagged alongside any item with Long/Flowing
+    Fins = true, expandable to the specific list.
+  - **Below minimum group size** — an item's own \`quantity\` compared
+    against its Min Group Size trait. Self-referential, not pairwise — a
+    shoaling species kept alone is a compatibility problem with itself.
+  - **Plant herbivory risk** — any item with Eats/Uproots Plants = true,
+    flagged if the roster has any plant-category item at all (not
+    pairwise against a specific plant — there's no "vulnerable to being
+    eaten" trait on plants to compare against).
+  - **Tank too small (length/width)** — an item's Min Tank Length/Width
+    trait compared against the tank's own \`lengthIn\`/\`widthIn\` (see Tank
+    object below). Deliberately not derived from tank volume or a
+    blanket ratio like "1 inch of fish per gallon" — those break down
+    badly for large-bodied species (an oscar or common pleco needs far
+    more room than their size alone would suggest under that kind of
+    rule), so this stays a real per-species researched number instead.
 - No species database, no fetching, nothing fabricated — a "Copy research
   prompt" button per item generates a ready-to-paste research question
   (tuned to the tank's freshwater/saltwater type) for whatever AI the
   user already has; the actual research step is intentionally handed off
-  rather than guessed at.
+  rather than guessed at. Several fields on that prompt ask for a single
+  number (mouth size, adult size, min group size, min tank length/width),
+  but real sources often report those as a range — the prompt explicitly
+  instructs the AI answering it to compute the midpoint and mark it with
+  an asterisk, so what comes back reads as an honestly-labeled estimate
+  rather than something that looks like one directly-reported fact. If
+  you're generating a tank plan and a source you're working from gives a
+  range for one of these single-number fields, apply the same rule
+  yourself: average it, and say so.
 - Filterable to livestock-only or plant-only, and sortable by category
   (toggle which of the two comes first) — same display-only caveat as
   Roster's filters above.
@@ -203,11 +232,19 @@ they already know.
   gets one "Source X" step per item, each gated on that item reaching
   "arrived" — not hand-written, generated from the actual roster.
 
-**Weekly Log**
+**Log**
 - A running journal: free-text entries with an optional title, mood
   rating (thriving / stable / watching / concerned — itself trackable
   over time as a chart), water parameter readings, custom field values,
   and photos.
+- Not actually weekly, despite the internal field name (\`weekLabel\`,
+  unchanged for backward compatibility) — entries can be logged at any
+  cadence the user actually wants: daily, sporadic, monthly, whatever.
+  The label itself (default \`"Entry N"\`, e.g. "Entry 12") is a plain
+  editable text field, not derived from or tied to a real calendar week.
+  If generating log-adjacent content (e.g. a schedule referencing "check
+  weekly"), that's describing the maintenance cadence, not implying
+  anything about how often this tank's owner actually writes log entries.
 - Water parameters shown depend on the tank's water type: freshwater
   tanks get temp/pH/GH/KH/TDS/ammonia/nitrite/nitrate; saltwater tanks
   swap GH/KH/TDS for Salinity (specific gravity).
@@ -221,13 +258,13 @@ they already know.
   for the selected day.
 - Recurring tasks can have an optional end date, after which the series
   retires itself instead of repeating forever.
-- Completing a task on a day that already has a Weekly Log entry
+- Completing a task on a day that already has a Log entry
   automatically links the two — the log entry shows what maintenance
   happened that day, without creating a redundant record.
 
 **Parameters (charts)**
 - Every numeric water parameter and every numeric/boolean custom field
-  charts itself automatically over time from Weekly Log entries — no
+  charts itself automatically over time from Log entries — no
   separate chart-configuration step.
 - Mood is charted on the same concerned→thriving scale used in the Log.
 - Boolean custom fields only get their own chart once they've actually
@@ -307,13 +344,15 @@ The file must be a single JSON object:
 | name | string | yes | Display name, e.g. "The Guppy Tank" |
 | sizeGallons | number | yes | |
 | dimensions | string | no | e.g. \`"20\\" x 10\\" x 12\\""\` |
+| lengthIn | number | no | Separate from \`dimensions\` above on purpose — that's free text and can't be safely parsed for a number. Only set this if a real length is actually known; leave it out rather than guess from \`dimensions\`. Powers the Compatibility page's minimum-tank-length check |
+| widthIn | number | no | Same caveat as \`lengthIn\` — real number only, never inferred |
 | style | string | no | e.g. "Low-tech planted tank" |
 | startDate | string | no | Leave as \`""\` unless a real date is known |
 | waterType | string | recommended | \`"freshwater"\` or \`"saltwater"\`. Set \`"saltwater"\` for any reef/marine/coral plan — this controls which preset custom fields the user is offered (Alkalinity/Calcium/Magnesium/PAR vs. Shrimp Census/Fry Count) and whether Salinity or GH/KH/TDS shows up on the Log and Parameters pages. If omitted, the app defaults it to \`"freshwater"\`, so a saltwater plan that omits this will show the wrong preset fields — don't skip it for reef/marine tanks |
 | customFields | array of CustomFieldDef | yes, can be \`[]\` | See below |
 | roster | array of RosterItem | yes, can be \`[]\` | See below |
 | checklist | array of ChecklistTask | yes, can be \`[]\` | See below |
-| logs | array | yes | Always output as \`[]\` — log entries are written by the user later, never generated |
+| logs | array | yes | For a **new** tank plan generated from scratch: always output as \`[]\` — log entries are written by the user later, never generated. If instead you're editing or syncing an **existing** tank that already has real log entries (e.g. updating its plan to match a revised build doc), don't invent new entries and don't touch existing ones unless specifically asked to — but if you do add or edit an entry's \`mood\`, it must be exactly one of \`"thriving"\`, \`"stable"\`, \`"watching"\`, \`"concerned"\` (lowercase, exact match, nothing else) — any other value gets silently stripped on import rather than shown, so an invalid guess is worse than just leaving the field out. Omitting \`mood\` entirely is always valid; it's genuinely optional |
 | schedule | array of ScheduleTask | no, can be \`[]\` or omitted | See below — including when/how to handle a requested schedule with no stated cadence |
 
 ## CustomFieldDef

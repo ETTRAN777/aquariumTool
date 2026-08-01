@@ -1,4 +1,4 @@
-import type { RosterItem, WaterParams } from '../types';
+import type { RosterItem, WaterParams, Tank, CustomFieldValue } from '../types';
 
 export interface AggregatedTarget {
   min?: number;
@@ -116,6 +116,79 @@ export function computePredationThreats(roster: RosterItem[], predator: RosterIt
   return threats;
 }
 
+// Shared lookup — traits are matched by their exact preset label string,
+// same as everywhere else traits get read (there's no separate stable id
+// linking a RosterItemTrait back to its TargetTraitPreset).
+function getTraitValue(item: RosterItem, label: string): CustomFieldValue | undefined {
+  return item.traits?.find((t) => t.label === label)?.value;
+}
+
+// A shoaling species kept below its own minimum group size is a
+// compatibility failure with itself, not with another roster item — same
+// "only flag what's actually known" rule as everywhere else: silent
+// unless both the trait and the roster quantity are actually set.
+export function hasShoalingIssue(item: RosterItem): boolean {
+  if (item.category !== 'livestock') return false;
+  const minGroup = getTraitValue(item, '👥 Min Group Size');
+  if (typeof minGroup !== 'number' || item.quantity === undefined) return false;
+  return item.quantity < minGroup;
+}
+
+export interface AggressionThreat {
+  victimId: string;
+  victimName: string;
+}
+
+// Fin-nipping specifically targets long, flowing fins — not every
+// tankmate equally — so this needs both traits present to mean anything,
+// same two-sided requirement as predation needing both a mouth size and
+// an adult size.
+export function computeAggressionThreats(roster: RosterItem[], aggressor: RosterItem): AggressionThreat[] {
+  if (aggressor.category !== 'livestock' || getTraitValue(aggressor, '✂️ Fin Nipper') !== true) {
+    return [];
+  }
+  const threats: AggressionThreat[] = [];
+  for (const other of roster) {
+    if (other.id === aggressor.id || other.category !== 'livestock') continue;
+    if (getTraitValue(other, '🎗️ Long/Flowing Fins') === true) {
+      threats.push({ victimId: other.id, victimName: other.name });
+    }
+  }
+  return threats;
+}
+
+// Whether this livestock item is flagged as eating/uprooting plants AND
+// the tank actually has any plants for that to matter against — not
+// pairwise against a specific plant, just presence, since there's no
+// "vulnerable to being eaten" trait on plants to compare against (every
+// plant is fair game to a herbivore in practice).
+export function hasPlantHerbivoryRisk(roster: RosterItem[], item: RosterItem): boolean {
+  if (item.category !== 'livestock' || getTraitValue(item, '🌿 Eats/Uproots Plants') !== true) {
+    return false;
+  }
+  return roster.some((r) => r.category === 'plant');
+}
+
+// Minimum tank length is a real, per-species researched fact (some
+// species need more swimming length than their own body size alone would
+// suggest) — deliberately not derived from tank volume or a blanket
+// ratio, for the same reason Tank.lengthIn isn't parsed out of the
+// free-text dimensions string: a computed approximation here would be
+// exactly the kind of fake-precision this app avoids everywhere else.
+export function hasTankSizeIssue(item: RosterItem, tank: Tank): boolean {
+  if (item.category !== 'livestock') return false;
+  const minLength = getTraitValue(item, '📐 Min Tank Length (in)');
+  if (typeof minLength !== 'number' || tank.lengthIn === undefined) return false;
+  return tank.lengthIn < minLength;
+}
+
+export function hasTankWidthIssue(item: RosterItem, tank: Tank): boolean {
+  if (item.category !== 'livestock') return false;
+  const minWidth = getTraitValue(item, '📐 Min Tank Width (in)');
+  if (typeof minWidth !== 'number' || tank.widthIn === undefined) return false;
+  return tank.widthIn < minWidth;
+}
+
 const WATER_PARAM_LABELS: Record<keyof WaterParams, string> = {
   temperature: 'Temp °F',
   ph: 'pH',
@@ -149,22 +222,37 @@ export function buildResearchPrompt(
       ? 'temperature (°F), pH, and salinity (specific gravity)'
       : 'temperature (°F), pH, GH (general hardness), and KH (carbonate hardness)';
 
+  // Any field below marked * asks for one number, but real sources often
+  // report a range instead. Rather than leave the AI answering this to
+  // improvise, the instruction is explicit: compute the midpoint and mark
+  // it, so what comes back is an honestly-labeled estimate rather than
+  // something that reads as a single directly-reported fact. Doesn't
+  // apply to the water-parameter targets — those are genuinely supposed
+  // to be entered as real ranges (min/max), not averaged away.
+  const averagingNote =
+    'For any field marked with an asterisk (*), give one number. If your sources report a range instead of one figure, compute the midpoint yourself and keep the asterisk on your answer so it stays clear that\'s an averaged estimate, not a single number a source actually stated. Everything else (especially water parameters) should stay as real ranges where sources give them.';
+
   if (item.category === 'plant') {
-    return `Research ${item.name} for a planted aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source:
+    return `Research ${item.name} for a planted aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source. ${averagingNote}
 
 - Ideal water parameters: ${waterParamsList}
-- Mature size (inches, height/spread)
+- Mature size (inches, height/spread)*
 - Light requirements (low/medium/high)
 - Whether CO2 injection is required or just beneficial
 - Typical growth rate (slow/medium/fast)`;
   }
 
-  return `Research ${item.name} for a home aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source:
+  return `Research ${item.name} for a home aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source. ${averagingNote}
 
 - Ideal water parameters: ${waterParamsList}
-- Typical adult mouth size (mm) — relevant for assessing predation risk to shrimp/small inverts
-- Typical adult size (inches)
+- Typical adult mouth size (mm)* — relevant for assessing predation risk to shrimp/small inverts
+- Typical adult size (inches)*
+- Minimum group/shoal size this species actually needs to thrive*, or "not a shoaling species" if that's genuinely not a thing for it
+- Minimum tank length (inches) this species needs*, if it's more than just "fits in any tank big enough for its own body size" — otherwise say so
+- Minimum tank width (inches) this species needs*, same caveat
+- Whether it has long, flowing fins that make it a fin-nipping target (yes/no)
 - Reputation for fin-nipping behavior (yes/no, with reasoning)
+- Whether it eats or uproots live aquarium plants (yes/no)
 - Whether it's considered safe to keep with shrimp/inverts (yes/no, with reasoning)
 - General temperament (e.g. peaceful, semi-aggressive, aggressive, predatory)`;
 }

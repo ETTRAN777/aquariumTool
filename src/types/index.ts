@@ -140,6 +140,14 @@ export interface Tank {
   name: string;
   sizeGallons: number;
   dimensions?: string;
+  // Structured, separate from the free-text `dimensions` string above —
+  // deliberately not parsed out of it. "20x10x12" is unambiguous to a
+  // person but not safely machine-parseable (units, order, and format all
+  // vary), and guessing wrong here would silently feed a fabricated
+  // number into the minimum-tank-length compatibility check below. Only
+  // ever set when a real number is actually known.
+  lengthIn?: number;
+  widthIn?: number;
   style?: string;
   startDate?: string;
   // Drives which preset custom fields are offered (Settings) and whether

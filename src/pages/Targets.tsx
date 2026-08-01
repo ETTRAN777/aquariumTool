@@ -6,6 +6,11 @@ import {
   aggregateWaterParamTarget,
   computeParamStatus,
   computePredationThreats,
+  computeAggressionThreats,
+  hasShoalingIssue,
+  hasPlantHerbivoryRisk,
+  hasTankSizeIssue,
+  hasTankWidthIssue,
   waterParamLabel,
   buildResearchPrompt,
   type TargetStatus,
@@ -35,6 +40,7 @@ export default function Targets() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [threatListOpenId, setThreatListOpenId] = useState<string | null>(null);
+  const [aggressionListOpenId, setAggressionListOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TargetableCategory | 'all'>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
   const [leadCategory, setLeadCategory] = useState<TargetableCategory>('livestock');
@@ -236,6 +242,12 @@ export default function Targets() {
             const isExpanded = expandedId === item.id;
             const threats = computePredationThreats(tank.roster, item);
             const isThreatListOpen = threatListOpenId === item.id;
+            const aggressionThreats = computeAggressionThreats(tank.roster, item);
+            const isAggressionListOpen = aggressionListOpenId === item.id;
+            const shoalingIssue = hasShoalingIssue(item);
+            const plantHerbivoryRisk = hasPlantHerbivoryRisk(tank.roster, item);
+            const tankSizeIssue = hasTankSizeIssue(item, tank);
+            const tankWidthIssue = hasTankWidthIssue(item, tank);
             return (
               <div key={item.id} className="card p-4">
                 <button
@@ -257,6 +269,31 @@ export default function Targets() {
                       {threats.length > 0 && (
                         <span className="pill text-[11px] py-0.5 px-2 bg-coral/20 text-coral border border-coral/40 font-semibold">
                           ⚠ Predation Risk
+                        </span>
+                      )}
+                      {aggressionThreats.length > 0 && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          ✂️ Fin-Nipping Risk
+                        </span>
+                      )}
+                      {shoalingIssue && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          👥 Below Min Group Size
+                        </span>
+                      )}
+                      {plantHerbivoryRisk && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          🌿 May Eat/Uproot Plants
+                        </span>
+                      )}
+                      {tankSizeIssue && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          📐 Tank Too Small (Length)
+                        </span>
+                      )}
+                      {tankWidthIssue && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          📐 Tank Too Small (Width)
                         </span>
                       )}
                       {item.predatorRiskOverride && (
@@ -305,6 +342,35 @@ export default function Targets() {
                             {threats.map((t) => (
                               <li key={t.preyId} className="text-xs text-coral/90">
                                 • {t.preyName}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {aggressionThreats.length > 0 && (
+                      <div className="rounded-lg border border-amber/40 bg-amber/10 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAggressionListOpenId(isAggressionListOpen ? null : item.id)
+                          }
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+                        >
+                          <span className="text-xs text-amber">
+                            <span className="font-semibold">✂️ Fin-Nipping Risk</span> — flagged
+                            as a fin nipper, alongside long/flowing-finned tankmates
+                          </span>
+                          <span className="text-[11px] text-amber shrink-0">
+                            {isAggressionListOpen ? 'Hide ▲' : `Show ${aggressionThreats.length} ▼`}
+                          </span>
+                        </button>
+                        {isAggressionListOpen && (
+                          <ul className="px-3 pb-3 space-y-1">
+                            {aggressionThreats.map((t) => (
+                              <li key={t.victimId} className="text-xs text-amber/90">
+                                • {t.victimName}
                               </li>
                             ))}
                           </ul>

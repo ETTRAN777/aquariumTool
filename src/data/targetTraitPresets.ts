@@ -18,6 +18,11 @@ export interface TargetTraitPreset {
 // button).
 export const TARGET_TRAIT_PRESETS: TargetTraitPreset[] = [
   { label: '✂️ Fin Nipper', type: 'boolean', appliesTo: 'livestock' },
+  { label: '🎗️ Long/Flowing Fins', type: 'boolean', appliesTo: 'livestock' },
+  { label: '🌿 Eats/Uproots Plants', type: 'boolean', appliesTo: 'livestock' },
+  { label: '👥 Min Group Size', type: 'number', appliesTo: 'livestock' },
+  { label: '📐 Min Tank Length (in)', type: 'number', appliesTo: 'livestock' },
+  { label: '📐 Min Tank Width (in)', type: 'number', appliesTo: 'livestock' },
   { label: '😊 Temperament', type: 'text', appliesTo: 'livestock' },
   { label: '📏 Mature Size (in)', type: 'number', appliesTo: 'plant' },
   { label: '💡 Light Needs', type: 'text', appliesTo: 'plant' },

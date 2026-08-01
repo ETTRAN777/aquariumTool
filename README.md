@@ -81,8 +81,16 @@ tracks is fully customizable.
   livestock/plant item, automatically intersected into a tank-wide target
   and checked against your most recent logged reading. Mouth Size and Adult
   Size fields drive an automatic predation-risk flag across the whole
-  roster. Nothing is fetched or fabricated — a "Copy research prompt"
-  button hands the actual research step to whatever AI you use
+  roster, and four more checks run the same silent-unless-known way:
+  fin-nipping risk (pairwise, like predation), below-minimum-group-size
+  (a shoaling species checked against its own quantity), plant herbivory
+  risk, and tank-too-small warnings against real per-species minimum
+  length/width — deliberately not a blanket ratio like "1 inch of fish per
+  gallon," since that breaks down badly for large-bodied species. Nothing
+  is fetched or fabricated — a "Copy research prompt" button hands the
+  actual research step to whatever AI you use, and explicitly asks for an
+  averaged, clearly-marked estimate on any field a source is likely to
+  report as a range instead of one number
 - **Build Checklist** — steps can depend on other steps *or* on a roster item
   reaching a given status (e.g. "install the filter" waits until the filter
   shows "Arrived" on the roster) — fully editable, reorderable, and custom
@@ -90,12 +98,15 @@ tracks is fully customizable.
   checklist are click-to-arm (click once, confirm with a second click within
   a few seconds) rather than instant, so a stray click can't wipe something
   out
-- **Weekly Log** — blog-style entries with water parameters, this tank's
-  custom fields, mood tags, and photos. Deleting an entry asks for
-  confirmation first, since it's usually the thing with the most effort
-  behind it
+- **Log** — blog-style entries with water parameters, this tank's
+  custom fields, mood tags, and photos. Not actually weekly — despite the
+  name it used to have, entries can be logged at whatever cadence
+  actually fits (daily, sporadic, monthly), and the entry label itself
+  (default "Entry N") is a plain editable text field, not tied to a real
+  calendar week. Deleting an entry asks for confirmation first, since
+  it's usually the thing with the most effort behind it
 - **Schedule** — recurring or one-off maintenance reminders in a real
-  calendar view, auto-linked to a Weekly Log entry if one already exists for
+  calendar view, auto-linked to a Log entry if one already exists for
   that day
 - **Parameters** — water chemistry and any numeric custom fields auto-charted
   over time, so you can *see* trends instead of just logging numbers into a

@@ -20,7 +20,7 @@ export default function Log() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-display text-2xl font-semibold">Weekly Log</h2>
+          <h2 className="font-display text-2xl font-semibold">Log</h2>
           <p className="text-sm text-foam-dim mt-1">The build log and journal, one entry at a time.</p>
         </div>
         <button
@@ -250,8 +250,9 @@ function EntryForm({
   editing?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
+  const [entryLabel, setEntryLabel] = useState(initial?.weekLabel ?? `Entry ${weekNumber}`);
   const [body, setBody] = useState(initial?.body ?? '');
-  const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood ?? 'stable');
+  const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood);
   const [params, setParams] = useState<WaterParams>(initial?.params ?? {});
   const [customValues, setCustomValues] = useState<Record<string, CustomFieldValue>>(
     initial?.customValues ?? {}
@@ -295,7 +296,7 @@ function EntryForm({
     if (!title.trim() || !body.trim()) return;
     onSubmit({
       id: initial?.id ?? crypto.randomUUID(),
-      weekLabel: initial?.weekLabel ?? `Week ${weekNumber}`,
+      weekLabel: entryLabel.trim() || `Entry ${weekNumber}`,
       date: initial?.date ?? new Date().toISOString(),
       title: title.trim(),
       body: body.trim(),
@@ -314,6 +315,12 @@ function EntryForm({
     <>
     <form onSubmit={submit} className={`card p-5 space-y-4 ${editing ? 'border-amber/40' : ''}`}>
       <input
+        placeholder="Entry label (e.g. &quot;Entry 12&quot;, a date, whatever's useful to you)"
+        value={entryLabel}
+        onChange={(e) => setEntryLabel(e.target.value)}
+        className="field text-xs text-foam-dim"
+      />
+      <input
         placeholder="Entry title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -321,7 +328,7 @@ function EntryForm({
         required
       />
       <textarea
-        placeholder="What happened this week?"
+        placeholder="What happened since your last entry?"
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={4}
@@ -330,13 +337,13 @@ function EntryForm({
       />
 
       <div>
-        <p className="field-label">Mood</p>
+        <p className="field-label">Mood (optional)</p>
         <div className="flex gap-2 flex-wrap">
           {(Object.keys(MOOD_LABELS) as LogEntry['mood'][]).map((m) => (
             <button
               type="button"
               key={m}
-              onClick={() => setMood(m)}
+              onClick={() => setMood(mood === m ? undefined : m)}
               className={`pill py-1.5 px-3 ${
                 mood === m
                   ? 'bg-moss text-foam'

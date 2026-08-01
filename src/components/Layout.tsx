@@ -15,7 +15,7 @@ const navItems = [
   { to: '/roster', label: 'Roster' },
   { to: '/targets', label: 'Compatibility' },
   { to: '/checklist', label: 'Build Checklist' },
-  { to: '/log', label: 'Weekly Log' },
+  { to: '/log', label: 'Log' },
   { to: '/schedule', label: 'Schedule' },
   { to: '/charts', label: 'Parameters' },
 ];
