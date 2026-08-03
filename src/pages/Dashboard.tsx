@@ -4,11 +4,13 @@ import { useData } from '../lib/DataContext';
 import { todayIso } from '../lib/date';
 import { MOOD_LABELS } from '../lib/constants';
 import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '../lib/conceptImage';
+import { buildPlanSummary } from '../lib/planSummary';
 import type { CustomFieldValue } from '../types';
 
 export default function Dashboard() {
   const { activeTank } = useData();
   const [copiedPrompt, setCopiedPrompt] = useState<'simple' | 'detailed' | null>(null);
+  const [copiedPlan, setCopiedPlan] = useState(false);
   if (!activeTank) return null;
   const { roster, checklist, logs, customFields, schedule } = activeTank;
 
@@ -23,6 +25,18 @@ export default function Dashboard() {
       .then(() => {
         setCopiedPrompt(variant);
         setTimeout(() => setCopiedPrompt(null), 2000);
+      })
+      .catch(() => {});
+  }
+
+  function handleCopyPlanSummary() {
+    if (!activeTank) return;
+    const summary = buildPlanSummary(activeTank);
+    navigator.clipboard
+      .writeText(summary)
+      .then(() => {
+        setCopiedPlan(true);
+        setTimeout(() => setCopiedPlan(false), 2000);
       })
       .catch(() => {});
   }
@@ -123,6 +137,13 @@ export default function Dashboard() {
             className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
           >
             {copiedPrompt === 'detailed' ? '✓ Copied to clipboard' : 'detailed version'}
+          </button>
+          <span className="text-foam-dim/30 text-xs">·</span>
+          <button
+            onClick={handleCopyPlanSummary}
+            className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+          >
+            {copiedPlan ? '✓ Copied to clipboard' : '📋 Copy plan summary'}
           </button>
         </div>
       </section>

@@ -1,0 +1,289 @@
+import type { Tank, RosterItem, WaterParams } from '../types';
+import { CATEGORY_LABELS, STATUS_LABELS } from './constants';
+import { todayIso } from './date';
+import {
+  aggregateWaterParamTarget,
+  computeParamStatus,
+  checkMineralLoadConsistency,
+  computePredationThreats,
+  computeAggressionThreats,
+  hasShoalingIssue,
+  hasPlantHerbivoryRisk,
+  hasTankSizeIssue,
+  hasTankWidthIssue,
+  waterParamLabel,
+} from './targets';
+
+// Same "hand off to the user's own AI" pattern as conceptImage.ts, but for
+// a different purpose: not a visual, a readable plan-review document —
+// roster, checklist progress, and Compatibility's actual computed state
+// (not raw traits re-dumped, the same aggregation/risk functions Targets.tsx
+// itself calls, so this can never drift out of sync with what the app
+// shows on-screen). Every section is built from real stored/computed data
+// only; nothing here is invented, same rule as everywhere else in the app.
+
+const FRESHWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'gh', 'kh', 'tds'];
+const SALTWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'salinity'];
+
+function latestValue(tank: Tank, param: keyof WaterParams): number | undefined {
+  const entry = tank.logs.find((l) => l.params?.[param] !== undefined);
+  return entry?.params?.[param];
+}
+
+function tankHeaderLines(tank: Tank): string[] {
+  const waterType = tank.waterType === 'saltwater' ? 'Saltwater' : 'Freshwater';
+  const dims = tank.dimensions ? `, ${tank.dimensions}` : '';
+  const style = tank.style ? `\nStyle: ${tank.style}` : '';
+  const startDate = tank.startDate ? `\nStart date: ${tank.startDate}` : '';
+  return [
+    `# ${tank.name}`,
+    `${tank.sizeGallons}-gallon ${waterType.toLowerCase()} tank${dims}${style}${startDate}`,
+  ];
+}
+
+function buildRosterSection(tank: Tank): string {
+  const lines: string[] = ['## Roster'];
+  const categories: RosterItem['category'][] = [
+    'livestock',
+    'plant',
+    'hardscape',
+    'substrate',
+    'equipment',
+  ];
+
+  const anyItems = tank.roster.length > 0;
+  if (!anyItems) {
+    lines.push('(No roster items added yet.)');
+    return lines.join('\n');
+  }
+
+  for (const category of categories) {
+    const items = tank.roster.filter((r) => r.category === category);
+    if (items.length === 0) continue;
+    lines.push(`\n${CATEGORY_LABELS[category]}:`);
+    for (const item of items) {
+      const qty = item.quantity && item.quantity > 1 ? `${item.quantity}x ` : '';
+      const status = STATUS_LABELS[item.status];
+      const detail = item.detail ? ` — ${item.detail}` : '';
+      lines.push(`- ${qty}${item.name} (${status})${detail}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildChecklistSection(tank: Tank): string {
+  const lines: string[] = ['## Build checklist'];
+  if (tank.checklist.length === 0) {
+    lines.push('(No checklist steps yet.)');
+    return lines.join('\n');
+  }
+
+  const completed = tank.checklist.filter((c) => c.done);
+  const remaining = tank.checklist.filter((c) => !c.done);
+  const pct = Math.round((completed.length / tank.checklist.length) * 100);
+  lines.push(`${completed.length} of ${tank.checklist.length} steps complete (${pct}%)`);
+
+  if (completed.length > 0) {
+    lines.push('\nCompleted steps:');
+    for (const task of completed) {
+      lines.push(`- ${task.label}`);
+    }
+  }
+
+  if (remaining.length > 0) {
+    lines.push('\nRemaining steps:');
+    for (const task of remaining) {
+      lines.push(`- ${task.label}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+// Mirrors Targets.tsx's tank-wide summary exactly — same aggregation and
+// status functions, same "no-target"/"no-data" distinction preserved
+// rather than collapsed into a false all-clear.
+function buildWaterTargetsSection(tank: Tank): string {
+  const lines: string[] = ['## Water parameter targets (tank-wide)'];
+  const relevantParams = tank.waterType === 'saltwater' ? SALTWATER_PARAMS : FRESHWATER_PARAMS;
+  const targetableItems = tank.roster.filter(
+    (r) => r.category === 'livestock' || r.category === 'plant'
+  );
+
+  if (targetableItems.length === 0) {
+    lines.push('(No livestock or plants added yet, so no targets to aggregate.)');
+    return lines.join('\n');
+  }
+
+  for (const param of relevantParams) {
+    const aggregated = aggregateWaterParamTarget(tank.roster, param);
+    const current = latestValue(tank, param);
+    const status = computeParamStatus(aggregated, current);
+    const label = waterParamLabel(param);
+
+    if (!aggregated) {
+      lines.push(`- ${label}: no targets set`);
+      continue;
+    }
+
+    let line = `- ${label}: target ${aggregated.min ?? '—'} to ${aggregated.max ?? '—'}`;
+    if (aggregated.conflict) {
+      line += ` ⚠ CONFLICT — ${aggregated.minContributor} needs ≥${aggregated.min}, but ${aggregated.maxContributor} needs ≤${aggregated.max}`;
+    }
+    if (current !== undefined) {
+      line += `, current ${current}`;
+      if (status === 'alert') line += ' ⚠ OUT OF TARGET';
+    } else {
+      line += ', not logged yet';
+    }
+    lines.push(line);
+  }
+
+  const mineralLoadCheck = checkMineralLoadConsistency(tank.roster);
+  if (mineralLoadCheck?.status === 'unreachable') {
+    lines.push(
+      `\n⚠ Conflicting targets: GH, KH, and TDS — this is a simple arithmetic check (not real aquarium chemistry): GH (${mineralLoadCheck.ghMinPpm.toFixed(0)}–${mineralLoadCheck.ghMaxPpm.toFixed(0)} ppm as CaCO₃) + KH (${mineralLoadCheck.khMinPpm.toFixed(0)}–${mineralLoadCheck.khMaxPpm.toFixed(0)} ppm) put a floor of ${mineralLoadCheck.hardFloorPpm.toFixed(0)} ppm under the water even at the most TDS-minimizing meter calibration on record — over the ${mineralLoadCheck.tdsMax} ppm TDS ceiling. No realistic meter reconciles these three numbers as set.`
+    );
+  } else if (mineralLoadCheck?.status === 'unlikely') {
+    lines.push(
+      `\nWorth double-checking: GH, KH, and TDS — just arithmetic, not real chemistry knowledge: under a typical meter calibration, GH + KH imply a mineral floor of ${mineralLoadCheck.typicalFloorPpm.toFixed(0)} ppm against a TDS ceiling of ${mineralLoadCheck.tdsMax} ppm. Not a hard conflict — depends on the specific meter — but worth a look once water is actually mixed to these targets.`
+    );
+  } else if (mineralLoadCheck?.status === 'ok' && !mineralLoadCheck.rawRangeWithinTds) {
+    lines.push(
+      `\n(FYI: GH + KH imply a mineral load that could realistically read up to ${mineralLoadCheck.realisticCeilingPpm.toFixed(0)} ppm on TDS (raw mass ${mineralLoadCheck.minCombinedPpm.toFixed(0)}–${mineralLoadCheck.maxCombinedPpm.toFixed(0)} ppm as CaCO₃, scaled by the highest documented meter calibration factor). Not a conflict with the ${mineralLoadCheck.tdsMax} ppm TDS target, just context.)`
+    );
+  }
+
+  return lines.join('\n');
+}
+
+// Mirrors the per-item flag pills on Targets.tsx — same functions, so a
+// flag can never appear here that wouldn't also appear on-screen, or vice
+// versa.
+function buildRisksSection(tank: Tank): string {
+  const lines: string[] = ['## Compatibility flags'];
+  const flagged: string[] = [];
+
+  for (const item of tank.roster) {
+    const itemFlags: string[] = [];
+
+    const threats = computePredationThreats(tank.roster, item);
+    if (threats.length > 0) {
+      itemFlags.push(`Predation risk to: ${threats.map((t) => t.preyName).join(', ')}`);
+    }
+
+    const aggressionThreats = computeAggressionThreats(tank.roster, item);
+    if (aggressionThreats.length > 0) {
+      itemFlags.push(`Fin-nipping risk to: ${aggressionThreats.map((t) => t.victimName).join(', ')}`);
+    }
+
+    if (hasShoalingIssue(item)) {
+      itemFlags.push('Below minimum group size');
+    }
+
+    if (hasPlantHerbivoryRisk(tank.roster, item)) {
+      itemFlags.push('May eat/uproot plants in this tank');
+    }
+
+    if (hasTankSizeIssue(item, tank)) {
+      itemFlags.push('Tank too small (length)');
+    }
+
+    if (hasTankWidthIssue(item, tank)) {
+      itemFlags.push('Tank too small (width)');
+    }
+
+    if (itemFlags.length > 0) {
+      flagged.push(`- ${item.name}: ${itemFlags.join('; ')}`);
+    }
+  }
+
+  if (flagged.length === 0) {
+    lines.push('No flags currently raised on any roster item.');
+  } else {
+    lines.push(...flagged);
+  }
+
+  return lines.join('\n');
+}
+
+// Mirrors Schedule.tsx's own categorization (active vs finished, overdue vs
+// upcoming by comparing dueDate to today) rather than inventing a new
+// grouping — so this can't disagree with what the Schedule page shows.
+function buildScheduleSection(tank: Tank): string {
+  const lines: string[] = ['## Schedule'];
+  if (tank.schedule.length === 0) {
+    lines.push('(No schedule tasks yet.)');
+    return lines.join('\n');
+  }
+
+  const today = todayIso();
+  const active = tank.schedule.filter((t) => !t.done);
+  const finished = tank.schedule.filter((t) => t.done);
+
+  const overdue = active
+    .filter((t) => t.dueDate < today)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const upcoming = active
+    .filter((t) => t.dueDate >= today)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  function describeTask(t: (typeof tank.schedule)[number]): string {
+    const recurrence = t.recurrenceDays ? `, recurring every ${t.recurrenceDays}d` : '';
+    const lastDone = t.lastCompletedDate ? `, last done ${t.lastCompletedDate}` : '';
+    const detail = t.detail ? ` — ${t.detail}` : '';
+    return `- ${t.label} (due ${t.dueDate}${recurrence}${lastDone})${detail}`;
+  }
+
+  if (overdue.length > 0) {
+    lines.push('\nOverdue:');
+    for (const t of overdue) lines.push(describeTask(t));
+  }
+
+  if (upcoming.length > 0) {
+    lines.push('\nUpcoming:');
+    for (const t of upcoming) lines.push(describeTask(t));
+  }
+
+  if (overdue.length === 0 && upcoming.length === 0) {
+    lines.push('No active (undone) tasks.');
+  }
+
+  if (finished.length > 0) {
+    lines.push(`\n${finished.length} one-off task${finished.length === 1 ? '' : 's'} marked done.`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildLatestLogSection(tank: Tank): string {
+  const lines: string[] = ['## Latest log entry'];
+  const latest = tank.logs[0];
+  if (!latest) {
+    lines.push('(No log entries yet.)');
+    return lines.join('\n');
+  }
+  lines.push(`${latest.weekLabel} — ${latest.date}`);
+  lines.push(latest.title);
+  if (latest.mood) lines.push(`Mood: ${latest.mood}`);
+  if (latest.body) lines.push(latest.body);
+  return lines.join('\n');
+}
+
+const CLOSING_LINE =
+  "This is the tank's actual current plan and computed state, generated directly from stored data — nothing above is invented. Please review for anything that looks off, risky, or worth reconsidering, and flag it back.";
+
+export function buildPlanSummary(tank: Tank): string {
+  const sections = [
+    tankHeaderLines(tank).join('\n'),
+    buildRosterSection(tank),
+    buildChecklistSection(tank),
+    buildScheduleSection(tank),
+    buildWaterTargetsSection(tank),
+    buildRisksSection(tank),
+    buildLatestLogSection(tank),
+    CLOSING_LINE,
+  ];
+  return sections.join('\n\n');
+}

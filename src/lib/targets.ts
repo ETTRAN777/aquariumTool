@@ -1,4 +1,5 @@
 import type { RosterItem, WaterParams, Tank, CustomFieldValue } from '../types';
+import { CATEGORY_LABELS } from './constants';
 
 export interface AggregatedTarget {
   min?: number;
@@ -52,11 +53,185 @@ export function aggregateWaterParamTarget(
 
 export type TargetStatus = 'no-target' | 'no-data' | 'conflict' | 'ok' | 'alert';
 
-// Compares the tank's most recent logged value for a parameter against
-// the computed aggregate range. "no-target" (nobody in the roster cares
-// about this parameter) and "no-data" (nobody's logged it yet) are kept
-// distinct from "ok"/"alert" on purpose — neither is actually a pass or a
-// failure, and collapsing them into "ok" would be a false all-clear.
+// GH and KH are both reported in "German degrees" by hobby test kits — the
+// same unit, and the standard conversion to a shared ppm-as-CaCO3 basis is
+// this constant. Used only by checkMineralLoadConsistency below, to put GH
+// and KH on the same footing as a TDS reading (which is already a ppm
+// figure) for a real apples-to-apples comparison.
+const CACO3_PPM_PER_DEGREE = 17.848;
+
+// Hobby TDS meters don't measure mass directly — they measure electrical
+// conductivity and multiply by a calibration factor that varies by
+// standard (NaCl, KCl, "442"/natural-water). Documented factors span
+// roughly 0.47 to 0.85 — a real, large spread: the same physical water
+// can read very differently on two different meters. That means
+// converting GH/KH degrees to a CaCO3-equivalent mass figure and
+// comparing it directly against a TDS *reading* isn't an apples-to-apples
+// comparison; the two numbers live on different measurement bases. This
+// check uses two points on that documented spread instead of pretending
+// they're the same unit:
+//   - LOW: close to the most TDS-minimizing documented factor. If the
+//     mineral floor still exceeds the TDS ceiling even scaled this low,
+//     no realistic meter/calibration combination explains it away — a
+//     genuine mismatch, not a units ambiguity.
+//   - TYPICAL: a common "natural water" factor. Used only for a soft,
+//     non-blocking heads-up, not a claim of certainty — most real tanks
+//     land inside this and shouldn't be flagged at all.
+//   - HIGH: the highest documented factor (442/natural-water standard).
+//     No real meter reads AT the raw unscaled mass — every documented
+//     calibration reads below it. This is the realistic ceiling: the
+//     highest a real TDS reading could plausibly go for a given mineral
+//     load. Used for the informational "could run this high" note —
+//     quoting the raw 1.0-factor mass there would describe a number no
+//     real meter could ever actually produce.
+const LOW_CALIBRATION_FACTOR = 0.5;
+const TYPICAL_CALIBRATION_FACTOR = 0.7;
+const HIGH_CALIBRATION_FACTOR = 0.85;
+
+export interface MineralLoadCheck {
+  ghMinPpm: number;
+  ghMaxPpm: number;
+  khMinPpm: number;
+  khMaxPpm: number;
+  minCombinedPpm: number; // GH min + KH min, mass basis (ppm as CaCO3) — the floor of what hitting both targets would actually put in the water
+  maxCombinedPpm: number; // GH max + KH max, mass basis
+  tdsMin?: number;
+  tdsMax?: number;
+  hardFloorPpm: number; // minCombinedPpm scaled by LOW_CALIBRATION_FACTOR — exceeding TDS here means no documented meter calibration reconciles the numbers
+  typicalFloorPpm: number; // minCombinedPpm scaled by TYPICAL_CALIBRATION_FACTOR — a softer signal only
+  realisticCeilingPpm: number; // maxCombinedPpm scaled by HIGH_CALIBRATION_FACTOR — the highest a real meter could plausibly read for this mineral load; the raw unscaled mass is never actually achievable as a meter reading
+  // True once the stated TDS ceiling already covers the realistic
+  // (calibration-scaled) ceiling on its own — meaning the person has
+  // already set TDS high enough that no real meter reading could exceed
+  // it. Compared against the ROUNDED ceiling (matching what's shown in
+  // the UI/summary), not the raw float — otherwise typing in exactly the
+  // number that's displayed could still fail the check by a fraction of
+  // a ppm.
+  rawRangeWithinTds: boolean;
+  // 'unreachable': even under the most TDS-minimizing calibration, the
+  // mineral floor exceeds the TDS ceiling — a genuine mismatch.
+  // 'unlikely': not unreachable, but exceeds a typical calibration's
+  // floor — worth a glance, not a real conflict.
+  // 'ok': fits comfortably under even a typical calibration's floor.
+  status: 'unreachable' | 'unlikely' | 'ok';
+}
+
+// GH and KH each measure a real, separate mineral contribution (calcium/
+// magnesium salts for GH, carbonate/bicarbonate salts for KH — genuinely
+// different ions in most shrimp-hobby remineralizers, not double-counting
+// the same source), and their combined mass is a real physical floor on
+// what's dissolved in the water. What's uncertain isn't whether they add
+// up — they do, in mass terms — it's how that mass maps onto a specific
+// meter's TDS *reading* (see the calibration-factor note above). This
+// check stays conservative on both ends: only runs once GH, KH, and a TDS
+// ceiling are ALL actually set (same "silent unless the relevant data is
+// there" rule as every other check here — a partial GH or KH range, e.g.
+// only a max with no min, can't be turned into a real floor to check),
+// and only flags 'unreachable' when the most generous documented
+// calibration still can't reconcile the numbers.
+export function checkMineralLoadConsistency(roster: RosterItem[]): MineralLoadCheck | null {
+  const gh = aggregateWaterParamTarget(roster, 'gh');
+  const kh = aggregateWaterParamTarget(roster, 'kh');
+  const tds = aggregateWaterParamTarget(roster, 'tds');
+
+  if (!gh || gh.min === undefined || gh.max === undefined) return null;
+  if (!kh || kh.min === undefined || kh.max === undefined) return null;
+  if (!tds || tds.max === undefined) return null;
+
+  const ghMinPpm = gh.min * CACO3_PPM_PER_DEGREE;
+  const ghMaxPpm = gh.max * CACO3_PPM_PER_DEGREE;
+  const khMinPpm = kh.min * CACO3_PPM_PER_DEGREE;
+  const khMaxPpm = kh.max * CACO3_PPM_PER_DEGREE;
+  const minCombinedPpm = ghMinPpm + khMinPpm;
+  const maxCombinedPpm = ghMaxPpm + khMaxPpm;
+  const hardFloorPpm = minCombinedPpm * LOW_CALIBRATION_FACTOR;
+  const typicalFloorPpm = minCombinedPpm * TYPICAL_CALIBRATION_FACTOR;
+  const realisticCeilingPpm = maxCombinedPpm * HIGH_CALIBRATION_FACTOR;
+  const rawRangeWithinTds = tds.max >= Math.round(realisticCeilingPpm);
+
+  let status: MineralLoadCheck['status'];
+  if (hardFloorPpm > tds.max) {
+    status = 'unreachable';
+  } else if (typicalFloorPpm > tds.max) {
+    status = 'unlikely';
+  } else {
+    status = 'ok';
+  }
+
+  return {
+    ghMinPpm,
+    ghMaxPpm,
+    khMinPpm,
+    khMaxPpm,
+    minCombinedPpm,
+    maxCombinedPpm,
+    tdsMin: tds.min,
+    tdsMax: tds.max,
+    hardFloorPpm,
+    typicalFloorPpm,
+    realisticCeilingPpm,
+    rawRangeWithinTds,
+    status,
+  };
+}
+
+// Every livestock/plant item that has set a target for this parameter —
+// the full contributor list, not just whichever one item set the
+// tightest min or max (that's all aggregateWaterParamTarget's
+// min/maxContributor track). Needed here because a research prompt about
+// *why* a tank-wide target is what it is has to name everything driving
+// it, not just the single tightest item.
+export function itemsWithWaterParamTarget(roster: RosterItem[], param: keyof WaterParams): RosterItem[] {
+  return roster.filter(
+    (r) => (r.category === 'livestock' || r.category === 'plant') && r.waterParamTargets?.[param]
+  );
+}
+
+// Same "hand the research question off to the user's own AI" pattern as
+// buildResearchPrompt below, but for the mineral-load conflict itself
+// rather than one species — every roster item that set a gh/kh/tds
+// target is named, since any of them could be the one whose target
+// should actually move, not just whichever one happens to set the
+// tightest bound. Only ever surfaced for a genuine 'unreachable' result
+// (see Targets.tsx) — the softer 'unlikely' tier doesn't get a research
+// prompt, since asking an AI to resolve a maybe isn't worth the ceremony.
+export function buildMineralLoadResearchPrompt(tank: Tank, check: MineralLoadCheck): string {
+  const contributingIds = new Set<string>();
+  for (const param of ['gh', 'kh', 'tds'] as const) {
+    for (const item of itemsWithWaterParamTarget(tank.roster, param)) {
+      contributingIds.add(item.id);
+    }
+  }
+  const contributors = tank.roster.filter((r) => contributingIds.has(r.id));
+
+  const itemLines = contributors
+    .map((item) => {
+      const t = item.waterParamTargets ?? {};
+      const parts: string[] = [];
+      if (t.gh) parts.push(`GH ${t.gh.min ?? '—'}–${t.gh.max ?? '—'}`);
+      if (t.kh) parts.push(`KH ${t.kh.min ?? '—'}–${t.kh.max ?? '—'}`);
+      if (t.tds) parts.push(`TDS ${t.tds.min ?? '—'}–${t.tds.max ?? '—'}`);
+      return `- ${item.name} (${CATEGORY_LABELS[item.category]}): ${parts.join(', ')}`;
+    })
+    .join('\n');
+
+  return `I'm planning a ${tank.sizeGallons}-gallon ${tank.waterType} aquarium and my own planning tool flagged a real inconsistency in my researched water parameter targets that I need help resolving.
+
+Quick context on how this flag was generated, so you understand its limits: it's a simple arithmetic check, not real aquarium chemistry knowledge. It converts my GH and KH targets to a combined mineral mass (ppm as CaCO₃) and checks that even under the most TDS-minimizing meter calibration documented (a factor of ${LOW_CALIBRATION_FACTOR}, versus a typical natural-water factor closer to ${TYPICAL_CALIBRATION_FACTOR}), the mineral floor still exceeds my TDS ceiling. That's a fairly high bar — it only fires when no realistic meter/calibration combination could reconcile the numbers — so I trust it's a real mismatch, but it has no idea why these targets exist or which one actually matters most for my stock.
+
+The tank-wide targets, each intersected from the individual species/plant targets below, are:
+- GH: ${(check.ghMinPpm / CACO3_PPM_PER_DEGREE).toFixed(1)}–${(check.ghMaxPpm / CACO3_PPM_PER_DEGREE).toFixed(1)} dGH (${check.ghMinPpm.toFixed(0)}–${check.ghMaxPpm.toFixed(0)} ppm as CaCO₃)
+- KH: ${(check.khMinPpm / CACO3_PPM_PER_DEGREE).toFixed(1)}–${(check.khMaxPpm / CACO3_PPM_PER_DEGREE).toFixed(1)} dKH (${check.khMinPpm.toFixed(0)}–${check.khMaxPpm.toFixed(0)} ppm as CaCO₃)
+- TDS: ${check.tdsMin ?? '—'}–${check.tdsMax} ppm
+
+Even at the most forgiving documented calibration, the implied mineral floor is ${check.hardFloorPpm.toFixed(0)} ppm — over the ${check.tdsMax} ppm TDS ceiling.
+
+Here's every roster item whose researched target contributed to these tank-wide ranges:
+${itemLines}
+
+Please help me figure out which target is actually wrong given these specific species/plants — is the TDS ceiling too conservative for this stock (and should be raised), is the GH or KH range wider than these species actually need (and should be narrowed), or is there a genuine conflict between two items' real requirements? Please reference the actual species/plant needs above rather than just re-deriving the same math I already gave you.`;
+}
+
 export function computeParamStatus(
   aggregated: AggregatedTarget | null,
   currentValue: number | undefined

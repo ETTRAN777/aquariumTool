@@ -5,6 +5,8 @@ import { CATEGORY_LABELS } from '../lib/constants';
 import {
   aggregateWaterParamTarget,
   computeParamStatus,
+  checkMineralLoadConsistency,
+  buildMineralLoadResearchPrompt,
   computePredationThreats,
   computeAggressionThreats,
   hasShoalingIssue,
@@ -39,6 +41,7 @@ export default function Targets() {
   const { activeTank, updateRosterItem } = useData();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedMineralPrompt, setCopiedMineralPrompt] = useState(false);
   const [threatListOpenId, setThreatListOpenId] = useState<string | null>(null);
   const [aggressionListOpenId, setAggressionListOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TargetableCategory | 'all'>('all');
@@ -55,6 +58,7 @@ export default function Targets() {
   const targetableItems = tank.roster.filter(
     (r) => r.category === 'livestock' || r.category === 'plant'
   );
+  const mineralLoadCheck = checkMineralLoadConsistency(tank.roster);
 
   let displayedItems = targetableItems.filter((r) => filter === 'all' || r.category === filter);
   if (sortMode === 'category') {
@@ -90,6 +94,18 @@ export default function Targets() {
         // Clipboard permission denied or unavailable — fail quietly rather
         // than throw.
       });
+  }
+
+  function copyMineralLoadPrompt() {
+    if (!mineralLoadCheck) return;
+    const prompt = buildMineralLoadResearchPrompt(tank, mineralLoadCheck);
+    navigator.clipboard
+      .writeText(prompt)
+      .then(() => {
+        setCopiedMineralPrompt(true);
+        setTimeout(() => setCopiedMineralPrompt(false), 2000);
+      })
+      .catch(() => {});
   }
 
   function setWaterParamTarget(
@@ -169,7 +185,18 @@ export default function Targets() {
               const aggregated = aggregateWaterParamTarget(tank.roster, param);
               const current = latestValue(param);
               const status = computeParamStatus(aggregated, current);
-              const style = STATUS_STYLES[status];
+              // GH, KH, and TDS are cross-checked against each other (see
+              // checkMineralLoadConsistency) — but only a genuine
+              // 'unreachable' result (no documented meter calibration can
+              // reconcile the numbers) touches these rows, using the exact
+              // same "conflict" pill/color a normal single-parameter
+              // conflict already uses. The softer 'unlikely' tier stays
+              // out of the rows entirely — it's a heads-up, not a
+              // conflict, and lives only in the card below.
+              const isMineralLoadRow = param === 'gh' || param === 'kh' || param === 'tds';
+              const displayStatus =
+                isMineralLoadRow && mineralLoadCheck?.status === 'unreachable' ? 'conflict' : status;
+              const style = STATUS_STYLES[displayStatus];
               return (
                 <div
                   key={param}
@@ -203,6 +230,82 @@ export default function Targets() {
           </div>
         )}
       </div>
+
+      {/* Cross-parameter check: GH and KH targets, taken together, imply a
+          real minimum mineral floor that a TDS ceiling can silently
+          conflict with, since nothing else on this page cross-checks
+          parameters against each other. Only renders once GH, KH, and a
+          TDS ceiling are all actually set; silent otherwise, same rule as
+          every other check on this page.
+
+          Two tiers, reusing existing app colors rather than inventing a
+          new palette:
+          - 'unreachable' uses the exact same coral "conflict" style the
+            row pills above use — a genuine, high-confidence mismatch.
+          - 'unlikely' reuses the existing neutral "no-data" sand style —
+            a soft heads-up, not a conflict, so it shouldn't look like one.
+            No research-prompt button here; asking an AI to resolve a
+            maybe isn't worth the ceremony. */}
+      {mineralLoadCheck && mineralLoadCheck.status === 'unreachable' && (
+        <div className={`card p-5 border ${STATUS_STYLES.conflict.classes}`}>
+          <p className="field-label mb-2 text-coral">{STATUS_STYLES.conflict.label}: GH, KH, and TDS</p>
+          <p className="text-xs text-foam-dim">
+            This is a simple arithmetic check, not real aquarium chemistry — it converts GH and KH
+            to a combined mineral mass and checks it against TDS even under the most TDS-minimizing
+            meter calibration on record. GH ({mineralLoadCheck.ghMinPpm.toFixed(0)}–
+            {mineralLoadCheck.ghMaxPpm.toFixed(0)} ppm as CaCO₃) and KH (
+            {mineralLoadCheck.khMinPpm.toFixed(0)}–{mineralLoadCheck.khMaxPpm.toFixed(0)} ppm)
+            together put a floor of{' '}
+            <span className="text-foam font-medium">{mineralLoadCheck.hardFloorPpm.toFixed(0)} ppm</span>{' '}
+            under the water — over the stated TDS ceiling of {mineralLoadCheck.tdsMax} ppm even at
+            that most-forgiving calibration. No realistic meter reconciles these three numbers as
+            set.
+          </p>
+          <button
+            onClick={copyMineralLoadPrompt}
+            className="btn btn-secondary text-xs py-1.5 px-3 mt-3"
+          >
+            {copiedMineralPrompt ? '✓ Copied to clipboard' : '📋 Copy research prompt'}
+          </button>
+        </div>
+      )}
+
+      {mineralLoadCheck && mineralLoadCheck.status === 'unlikely' && (
+        <div className={`card p-5 border ${STATUS_STYLES['no-data'].classes}`}>
+          <p className="field-label mb-2 text-sand">Worth double-checking: GH, KH, and TDS</p>
+          <p className="text-xs text-foam-dim">
+            Just arithmetic here, not real aquarium chemistry knowledge — under a typical meter
+            calibration, GH + KH imply a mineral floor of{' '}
+            <span className="text-foam font-medium">{mineralLoadCheck.typicalFloorPpm.toFixed(0)} ppm</span>{' '}
+            against a TDS ceiling of {mineralLoadCheck.tdsMax} ppm. Not a hard conflict — this
+            depends heavily on your specific meter's calibration — but worth a look once you've
+            actually got water mixed to these targets.
+          </p>
+        </div>
+      )}
+
+      {/* Third tier: not a warning at all, just an FYI. Even when GH/KH/TDS
+          are fully compatible, a real TDS meter reading could still climb
+          toward the top of the calibration spread for this mineral load
+          — worth knowing. Quotes the REALISTIC ceiling (scaled by the
+          highest documented calibration factor), not the raw unscaled
+          mass — no real meter reads at the unscaled figure, so quoting
+          it would describe a number nothing could ever actually show.
+          Only shows when the TDS ceiling doesn't already cover that
+          realistic ceiling — once someone's TDS max is high enough that
+          no real meter reading could exceed it, the note has nothing
+          left to add. No card, no border, no color — deliberately the
+          quietest possible treatment so it doesn't read as a warning
+          when it isn't one. */}
+      {mineralLoadCheck && mineralLoadCheck.status === 'ok' && !mineralLoadCheck.rawRangeWithinTds && (
+        <p className="text-xs text-foam-dim/60 italic px-1">
+          ℹ️ For reference: GH + KH imply a mineral load that could realistically read up to{' '}
+          {mineralLoadCheck.realisticCeilingPpm.toFixed(0)} ppm on TDS (raw mass{' '}
+          {mineralLoadCheck.minCombinedPpm.toFixed(0)}–{mineralLoadCheck.maxCombinedPpm.toFixed(0)} ppm as
+          CaCO₃, scaled by the highest documented meter calibration factor). Not a conflict with your{' '}
+          {mineralLoadCheck.tdsMax} ppm TDS target, just useful context.
+        </p>
+      )}
 
       {/* Per-item editors */}
       {targetableItems.length > 0 && (
@@ -388,31 +491,39 @@ export default function Targets() {
                     <div>
                       <p className="field-label mb-2">Water parameter targets (optional)</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {relevantParams.map((param) => (
-                          <div key={param}>
-                            <label className="text-[11px] text-foam-dim block mb-1">
-                              {waterParamLabel(param)}
-                            </label>
-                            <div className="flex gap-1">
-                              <input
-                                type="number"
-                                step="any"
-                                placeholder="min"
-                                value={item.waterParamTargets?.[param]?.min ?? ''}
-                                onChange={(e) => setWaterParamTarget(item, param, 'min', e.target.value)}
-                                className="field text-xs px-2 py-1.5"
-                              />
-                              <input
-                                type="number"
-                                step="any"
-                                placeholder="max"
-                                value={item.waterParamTargets?.[param]?.max ?? ''}
-                                onChange={(e) => setWaterParamTarget(item, param, 'max', e.target.value)}
-                                className="field text-xs px-2 py-1.5"
-                              />
+                        {relevantParams.map((param) => {
+                          const target = item.waterParamTargets?.[param];
+                          const hasRangeError =
+                            target?.min !== undefined && target?.max !== undefined && target.min > target.max;
+                          return (
+                            <div key={param}>
+                              <label className="text-[11px] text-foam-dim block mb-1">
+                                {waterParamLabel(param)}
+                              </label>
+                              <div className="flex gap-1">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="min"
+                                  value={target?.min ?? ''}
+                                  onChange={(e) => setWaterParamTarget(item, param, 'min', e.target.value)}
+                                  className={`field text-xs px-2 py-1.5 ${hasRangeError ? 'border-coral' : ''}`}
+                                />
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder="max"
+                                  value={target?.max ?? ''}
+                                  onChange={(e) => setWaterParamTarget(item, param, 'max', e.target.value)}
+                                  className={`field text-xs px-2 py-1.5 ${hasRangeError ? 'border-coral' : ''}`}
+                                />
+                              </div>
+                              {hasRangeError && (
+                                <p className="text-[10px] text-coral mt-1">Min can't be greater than max</p>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
