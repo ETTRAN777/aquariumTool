@@ -344,8 +344,9 @@ The file must be a single JSON object:
 | customFields | array of CustomFieldDef | yes, can be `[]` | See below |
 | roster | array of RosterItem | yes, can be `[]` | See below |
 | checklist | array of ChecklistTask | yes, can be `[]` | See below |
-| logs | array | yes | For a **new** tank plan generated from scratch: always output as `[]` — log entries are written by the user later, never generated. If instead you're editing or syncing an **existing** tank that already has real log entries (e.g. updating its plan to match a revised build doc), don't invent new entries and don't touch existing ones unless specifically asked to — but if you do add or edit an entry's `mood`, it must be exactly one of `"thriving"`, `"stable"`, `"watching"`, `"concerned"` (lowercase, exact match, nothing else) — any other value gets silently stripped on import rather than shown, so an invalid guess is worse than just leaving the field out. Omitting `mood` entirely is always valid; it's genuinely optional |
+| logs | array | yes | For a **new** tank plan generated from scratch: always output as `[]` — log entries are written by the user later, never generated. If instead you're editing or syncing an **existing** tank that already has real log entries (e.g. updating its plan to match a revised build doc), don't invent new entries and don't touch existing ones unless specifically asked to — but if you do add or edit an entry's `mood`, it must be exactly one of `"thriving"`, `"stable"`, `"watching"`, `"concerned"` (lowercase, exact match, nothing else) — any other value gets silently stripped on import rather than shown, so an invalid guess is worse than just leaving the field out. Omitting `mood` entirely is always valid; it's genuinely optional. Same rule for the optional `phase` field — one of `"planning"`, `"hardscaping"`, `"cycling"`, `"stocking"`, `"acclimating"`, `"established"` if set at all, otherwise omit it; don't guess a phase for an entry the user didn't tag themselves. `additions` (array of `{rosterItemId, requiredStatus}`, same shape as a ChecklistTask's `rosterLinks`) is likewise only for entries the user is actually editing, never invented for a from-scratch plan |
 | schedule | array of ScheduleTask | no, can be `[]` or omitted | See below — including when/how to handle a requested schedule with no stated cadence |
+| milestones | array of Milestone | no, can be `[]` or omitted | For a **new** tank plan generated from scratch: always output as `[]` — like `logs`, these are user-authored moments, never generated. See below |
 
 ## CustomFieldDef
 
@@ -539,6 +540,21 @@ you have specific intervals in mind?"*
 | endDate | string | no | ISO date. Recurring only — caps how far the series repeats; omit for an indefinitely-repeating reminder. Only include if the plan states a clear end point (e.g. "50% weekly water changes for the first month") |
 | done | boolean | no | Only meaningful for one-off tasks; omit or `false` for a new plan |
 
+## Milestone
+
+A notable, dated moment in the tank's build (e.g. "Cycling complete," "Founding shrimp added"). **Always output `[]` for a new tank plan generated from scratch** — like `logs`, these are user-authored moments recording something that actually happened, never generated speculatively for a plan that doesn't exist yet. If editing an existing tank and the user explicitly describes a real event to record, that's the only case where adding one is appropriate.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| id | string | yes | unique within this tank |
+| title | string | yes | e.g. "Cycling complete" |
+| description | string | no | Leave out to let the app generate its own fallback text — don't invent a reason for something the user didn't state |
+| date | string | yes | ISO date (`YYYY-MM-DD`) |
+| type | string | yes | One of `"phase-change"`, `"roster-addition"`, `"health-event"`, `"custom"` (lowercase, exact match) |
+| phase | string | no | Only set when `type` is `"phase-change"` — same six values as `LogEntry.phase` above |
+| relatedRosterItemIds | array of string | no | `RosterItem.id` values this milestone is about |
+| linkedLogEntryId | string | no | A `LogEntry.id`, if this milestone is tied to a specific log entry |
+
 ## Generation guidelines
 
 - Read the plan for: (1) purchasable items with approximate costs, (2) a
@@ -616,7 +632,8 @@ you have specific intervals in mind?"*
       "logs": [],
       "schedule": [
         { "id": "s-water", "label": "Water change", "dueDate": "2025-01-06", "recurrenceDays": 7, "endDate": "2025-02-03" }
-      ]
+      ],
+      "milestones": []
     }
   ]
 }
