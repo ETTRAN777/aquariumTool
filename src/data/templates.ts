@@ -1989,5 +1989,6 @@ export function buildTankFromTemplate(
     checklist,
     logs: [],
     schedule: [],
+    milestones: [],
   };
 }

@@ -68,6 +68,63 @@ export interface RosterLink {
   requiredStatus: SourcingStatus;
 }
 
+// The objective build stage a log entry represents — deliberately a
+// different vocabulary from LogEntry.mood's four words (thriving/stable/
+// watching/concerned) so the two axes never get conflated: phase is
+// "where is the build," mood is "how does it feel," and an entry can have
+// either, both, or neither set independently. Order matters — see
+// LOG_PHASE_ORDER in constants.ts, used for phase-regression detection
+// (2.0's milestone auto-suggest) as a simple index comparison.
+export type LogPhase =
+  | 'planning'
+  | 'hardscaping'
+  | 'cycling'
+  | 'stocking'
+  | 'acclimating'
+  | 'established';
+
+// Plays the same structural role MilestoneType does relative to `title`
+// that CustomFieldType plays relative to RosterItemTrait.label: `title` is
+// free text with nothing branching on it, `type` is a small closed set
+// because real behavior depends on it (which fallback description
+// template applies when `description` is left blank, and whether `phase`
+// is meaningful). Kept closed rather than open-ended-with-presets (unlike
+// RosterItemTrait.label) specifically because of that branching — a typo
+// in a free-text type would silently fall through to a default template
+// instead of erroring.
+export type MilestoneType = 'phase-change' | 'roster-addition' | 'health-event' | 'custom';
+
+// A notable, dated moment in a tank's build — either auto-suggested (e.g.
+// phase-regression detection comparing a new log entry's phase against
+// the prior one) or created by hand, independent of any log entry at all.
+// Schema-only for now (2.0 step 15a) — creation/edit UI, fallback-copy
+// templating, and regression detection are 15c.
+export interface Milestone {
+  id: string;
+  title: string;
+  // Left blank, 15c generates templated fallback copy keyed off `type`
+  // (and off the linked log entry's mood, for phase-change regressions) —
+  // never a fabricated reason ("you decided your tank needed another
+  // look" asserts a motive with no basis). Computed facts only.
+  description?: string;
+  date: string; // ISO date
+  type: MilestoneType;
+  phase?: LogPhase; // set when type === 'phase-change' — the phase being entered
+  // Direct reference to the roster items this milestone is about,
+  // independent of linkedLogEntryId below — a hand-created milestone
+  // (e.g. "ordered the founding shrimp") may have no linked log entry to
+  // reach roster context through at all. Plain ids, not RosterLink's
+  // {rosterItemId, requiredStatus} shape — requiredStatus is a
+  // forward-looking precondition (a checklist task gated on a future
+  // status), which doesn't apply to a milestone recording something that
+  // already happened.
+  relatedRosterItemIds?: string[];
+  // The log entry this milestone was detected from or attached to, if
+  // any — set for auto-suggested phase-regression milestones, absent for
+  // ones created by hand.
+  linkedLogEntryId?: string;
+}
+
 export interface ChecklistTask {
   id: string;
   label: string;
@@ -111,6 +168,14 @@ export interface LogEntry {
   photoUrls?: string[]; // base64 or /photos/ relative paths
   customValues?: Record<string, CustomFieldValue>; // keyed by CustomFieldDef.id
   mood?: 'thriving' | 'stable' | 'watching' | 'concerned';
+  // Objective build stage — see LogPhase's comment above RosterLink for
+  // why this is a separate axis from mood. Optional; most entries won't
+  // set it, only ones marking an actual stage transition are expected to.
+  phase?: LogPhase;
+  // Roster items that reached a new status as of this entry — same shape
+  // as ChecklistTask.rosterLinks (reused deliberately, not a new type),
+  // e.g. tagging the day founding shrimp actually arrived.
+  additions?: RosterLink[];
   // ScheduleTask ids completed on this same calendar day, auto-attached when
   // a matching log entry already exists — see completeScheduleTask in
   // DataContext. Never causes a log entry to be created; only annotates one
@@ -162,6 +227,7 @@ export interface Tank {
   checklist: ChecklistTask[];
   logs: LogEntry[];
   schedule: ScheduleTask[];
+  milestones: Milestone[];
 }
 
 // --- Recommended-roster questionnaire ---

@@ -1,4 +1,4 @@
-import type { SourcingStatus, RosterItem, LogEntry } from '../types';
+import type { SourcingStatus, RosterItem, LogEntry, LogPhase } from '../types';
 
 export const STATUS_ORDER: SourcingStatus[] = [
   'idea',
@@ -50,6 +50,30 @@ export function moodToScore(mood: Mood | undefined): number | undefined {
   const idx = MOOD_ORDER.indexOf(mood);
   return idx === -1 ? undefined : idx + 1; // 1 (concerned) .. 4 (thriving)
 }
+
+// Six-stage build sequence, ordered — used by 2.0's phase-regression
+// detection (comparing a new log entry's phase index against the prior
+// entry's — a later phase moving to an earlier index is a regression) and
+// by the phase-duration math in lib/duration.ts. Deliberately a different
+// vocabulary from Mood's four words (see LogPhase's comment in types) —
+// this is the objective build-stage axis, not the subjective-feeling one.
+export const LOG_PHASE_ORDER: LogPhase[] = [
+  'planning',
+  'hardscaping',
+  'cycling',
+  'stocking',
+  'acclimating',
+  'established',
+];
+
+export const LOG_PHASE_LABELS: Record<LogPhase, string> = {
+  planning: 'Planning',
+  hardscaping: 'Hardscaping',
+  cycling: 'Cycling',
+  stocking: 'Stocking',
+  acclimating: 'Acclimating',
+  established: 'Established',
+};
 
 // Tank name renders large in the header via TankSwitcher, which now
 // truncates gracefully with an ellipsis (see TankSwitcher.tsx) rather than

@@ -1,6 +1,6 @@
 import type { AppData, Tank, CustomFieldDef, RosterItem } from '../types';
 import { seedData } from '../data/seed';
-import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, STATUS_LABELS, MOOD_ORDER } from './constants';
+import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, STATUS_LABELS, MOOD_ORDER, LOG_PHASE_ORDER } from './constants';
 
 const STORAGE_KEY = 'tank-tracker:data:v1';
 
@@ -71,6 +71,25 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
     );
   }
 
+  // Same reasoning as the mood validation above, for LogPhase (2.0) — a
+  // hand-edited or AI-generated import could carry a phase value outside
+  // the six real options, and TypeScript's union type does nothing to
+  // stop that at runtime.
+  let invalidPhaseCount = 0;
+  logs = logs.map((l: any) => {
+    if (l.phase !== undefined && !LOG_PHASE_ORDER.includes(l.phase)) {
+      invalidPhaseCount++;
+      const { phase, ...rest } = l;
+      return rest;
+    }
+    return l;
+  });
+  if (invalidPhaseCount > 0) {
+    warnings.push(
+      `${invalidPhaseCount} log ${invalidPhaseCount === 1 ? 'entry has' : 'entries have'} a phase value that isn't one of the app's six build stages — cleared rather than kept as something the UI can't actually display.`
+    );
+  }
+
   let name = raw.name;
   if (typeof raw.name === 'string' && raw.name.length > NAME_MAX_LENGTH) {
     name = raw.name.slice(0, NAME_MAX_LENGTH);
@@ -98,6 +117,7 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
     checklist: Array.isArray(raw.checklist) ? raw.checklist : [],
     logs,
     schedule: Array.isArray(raw.schedule) ? raw.schedule : [],
+    milestones: Array.isArray(raw.milestones) ? raw.milestones : [],
     waterType: raw.waterType === 'saltwater' ? 'saltwater' : 'freshwater',
   };
 

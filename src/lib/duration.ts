@@ -1,0 +1,139 @@
+import type { Tank, LogPhase } from '../types';
+import { parseIsoDate, toIsoDate, todayIso } from './date';
+
+// Real calendar-breakdown duration math for 2.0's lifetime/per-phase
+// counters. Naive division (days/30 for months, days/365 for years)
+// drifts and doesn't round-trip — this walks forward by whole calendar
+// years, then whole calendar months, then whole weeks, then leftover
+// days, so start + years + months + (weeks*7 + days) always reconstructs
+// exactly back to end. Same rigor as date.ts's addDays/parseIsoDate
+// local-day handling, extended to the two JS Date footguns that come up
+// once you're adding years/months instead of just days:
+//   - Date#setMonth silently OVERFLOWS on short months (Jan 31 + 1 month
+//     natively becomes Mar 3, not Feb 28/29) — addCalendarMonths clamps.
+//   - Date#setFullYear on Feb 29 in a non-leap target year silently rolls
+//     to Mar 1 — addCalendarYears clamps to Feb 28 instead.
+
+export interface CalendarDuration {
+  years: number;
+  months: number;
+  weeks: number;
+  days: number; // leftover days after weeks are subtracted
+  totalDays: number; // whole-span day count, for sorting/comparison
+}
+
+// Both of these iterate one step at a time internally rather than jumping
+// straight to +n in a single setFullYear/setMonth call — that matters
+// once a clamp actually fires partway through. A single 4-year jump from
+// Feb 29, 2024 would land on Feb 29, 2028 (2028 is also a leap year), but
+// the intermediate year (2025) isn't, so the FIRST year-step clamps to
+// Feb 28 — and once that's happened, every subsequent step continues
+// from Feb 28, never "recovering" back to Feb 29 even in a later leap
+// year. Iterating ensures a direct n-step call always agrees with what n
+// sequential 1-step calls would produce (which is what the main walk
+// below actually does) — a single-jump version would silently disagree
+// with the iterative one in exactly this kind of edge case.
+export function addCalendarYears(d: Date, n: number): Date {
+  const step = n >= 0 ? 1 : -1;
+  let result = d;
+  for (let i = 0; i < Math.abs(n); i++) {
+    const wasFeb29 = result.getMonth() === 1 && result.getDate() === 29;
+    const next = new Date(result);
+    next.setFullYear(result.getFullYear() + step);
+    if (wasFeb29 && next.getMonth() !== 1) {
+      next.setDate(0); // rolled to Mar 1 because the target year isn't a leap year — back up to Feb 28
+    }
+    result = next;
+  }
+  return result;
+}
+
+export function addCalendarMonths(d: Date, n: number): Date {
+  const step = n >= 0 ? 1 : -1;
+  let result = d;
+  for (let i = 0; i < Math.abs(n); i++) {
+    const day = result.getDate();
+    const next = new Date(result.getFullYear(), result.getMonth() + step, 1);
+    const daysInTargetMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+    next.setDate(Math.min(day, daysInTargetMonth));
+    result = next;
+  }
+  return result;
+}
+
+// Signed: if endIso is before startIso (e.g. a misconfigured future
+// Tank.startDate), the magnitude is computed on the swapped pair and
+// every field comes back negated, rather than throwing or silently
+// clamping to zero — an honest, if unusual, real answer.
+export function calendarDurationBetween(startIso: string, endIso: string): CalendarDuration {
+  const forward = endIso >= startIso;
+  const startStr = forward ? startIso : endIso;
+  const endStr = forward ? endIso : startIso;
+  const start = parseIsoDate(startStr);
+  const end = parseIsoDate(endStr);
+
+  let years = 0;
+  let cursor = start;
+  while (true) {
+    const next = addCalendarYears(cursor, 1);
+    if (next > end) break;
+    cursor = next;
+    years++;
+  }
+
+  let months = 0;
+  while (true) {
+    const next = addCalendarMonths(cursor, 1);
+    if (next > end) break;
+    cursor = next;
+    months++;
+  }
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const remainingDays = Math.round((end.getTime() - cursor.getTime()) / msPerDay);
+  const weeks = Math.floor(remainingDays / 7);
+  const days = remainingDays % 7;
+  const totalDays = Math.round((end.getTime() - start.getTime()) / msPerDay);
+
+  const sign = forward ? 1 : -1;
+  return {
+    years: years * sign,
+    months: months * sign,
+    weeks: weeks * sign,
+    days: days * sign,
+    totalDays: totalDays * sign,
+  };
+}
+
+// Driven by Tank.startDate — returns null (never a fabricated 0) when
+// it isn't set, since "started today" and "start date unknown" are
+// genuinely different states a consumer shouldn't have to guess between.
+export function tankLifetimeDuration(tank: Tank): CalendarDuration | null {
+  if (!tank.startDate) return null;
+  return calendarDurationBetween(tank.startDate, todayIso());
+}
+
+// Driven by the EARLIEST log entry tagged with the given phase — not the
+// first one in array order, which isn't guaranteed to be chronological.
+// Returns null when no entry has this phase tagged at all, same
+// no-fabricated-0 rule as tankLifetimeDuration.
+export function tankPhaseDuration(tank: Tank, phase: LogPhase): CalendarDuration | null {
+  const tagged = tank.logs.filter((l) => l.phase === phase);
+  if (tagged.length === 0) return null;
+  const earliest = tagged.reduce((a, b) => (b.date < a.date ? b : a));
+  // LogEntry.date is a full ISO datetime (new Date().toISOString()), not
+  // the local-date-only string parseIsoDate expects — normalize first.
+  const startIso = toIsoDate(new Date(earliest.date));
+  return calendarDurationBetween(startIso, todayIso());
+}
+
+// The tank's current phase — whichever phase the most recently DATED
+// phase-tagged log entry carries (not the most recently created one;
+// entries can be added or edited out of chronological order). undefined,
+// never a fabricated default, when no entry has a phase tagged at all.
+export function currentPhase(tank: Tank): LogPhase | undefined {
+  const tagged = tank.logs.filter((l) => l.phase !== undefined);
+  if (tagged.length === 0) return undefined;
+  const latest = tagged.reduce((a, b) => (b.date > a.date ? b : a));
+  return latest.phase;
+}
