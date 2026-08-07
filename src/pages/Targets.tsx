@@ -17,6 +17,7 @@ import {
   buildResearchPrompt,
   type TargetStatus,
 } from '../lib/targets';
+import { buildStockingLoadResearchPrompt } from '../lib/planSummary';
 import type { RosterItem, RosterItemTrait, WaterParams, CustomFieldType, CustomFieldValue } from '../types';
 
 const FRESHWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'gh', 'kh', 'tds'];
@@ -42,6 +43,7 @@ export default function Targets() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedMineralPrompt, setCopiedMineralPrompt] = useState(false);
+  const [copiedStockingPrompt, setCopiedStockingPrompt] = useState(false);
   const [threatListOpenId, setThreatListOpenId] = useState<string | null>(null);
   const [aggressionListOpenId, setAggressionListOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TargetableCategory | 'all'>('all');
@@ -108,6 +110,17 @@ export default function Targets() {
       .catch(() => {});
   }
 
+  function copyStockingLoadPrompt() {
+    const prompt = buildStockingLoadResearchPrompt(tank);
+    navigator.clipboard
+      .writeText(prompt)
+      .then(() => {
+        setCopiedStockingPrompt(true);
+        setTimeout(() => setCopiedStockingPrompt(false), 2000);
+      })
+      .catch(() => {});
+  }
+
   function setWaterParamTarget(
     item: RosterItem,
     param: keyof WaterParams,
@@ -169,6 +182,12 @@ export default function Targets() {
           Set researched target ranges per item below — the tank-wide target for each parameter
           is the overlap that works for everything you've added.
         </p>
+        <button
+          onClick={copyStockingLoadPrompt}
+          className="mt-2 font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedStockingPrompt ? '✓ Copied to clipboard' : '🔬 Copy stocking plan review prompt'}
+        </button>
       </div>
 
       {/* Tank-wide summary */}

@@ -287,3 +287,30 @@ export function buildPlanSummary(tank: Tank): string {
   ];
   return sections.join('\n\n');
 }
+
+// A distinct ask from buildPlanSummary above — that one hands off a
+// general "here's my plan" summary; this one asks a specific judgment
+// question (is the overall stocking plan sound?) with explicit
+// guardrails on how confidently the answering AI should assert a
+// problem exists. Reuses buildRosterSection/buildWaterTargetsSection/
+// buildRisksSection rather than re-deriving the same data a second way —
+// same reasoning as everywhere else in this file, so this can't
+// contradict what the app itself already computed.
+const STOCKING_LOAD_ASK = `Please evaluate whether this overall stocking plan — tank size, hardscape/substrate, equipment, and livestock/plants together — is sound, keeping a few things in mind:
+
+- Only tell me something is a hard no if it's genuinely extreme or unsafe on its face (the kind of thing that's obviously wrong regardless of nuance, like a carp in a 2-gallon bowl) — don't hedge on something that's actually fine just to sound cautious.
+- For subtler or longer-horizon concerns — bioload building up faster than filtration or plants can realistically handle over time, eventual overcrowding, an equipment mismatch that only shows up months in, that kind of thing — give me your own honest take on it first, then point me toward what specifically I should research further to resolve the concern myself (concepts, comparisons, or search terms worth looking into), rather than just flagging it vaguely and leaving it there.
+- I'd rather hear about a real risk with something concrete to go look into than get a blanket reassurance either way.`;
+
+export function buildStockingLoadResearchPrompt(tank: Tank): string {
+  const sections = [
+    "I'd like a second opinion on my aquarium stocking plan before I commit to it.",
+    tankHeaderLines(tank).join('\n'),
+    buildRosterSection(tank),
+    "## What the app itself has already computed (for context, so you're not re-deriving it)",
+    buildWaterTargetsSection(tank),
+    buildRisksSection(tank),
+    STOCKING_LOAD_ASK,
+  ];
+  return sections.join('\n\n');
+}
