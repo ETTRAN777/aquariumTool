@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useData } from '../lib/DataContext';
-import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue } from '../types';
+import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue, RosterItem, RosterLink } from '../types';
 import { resizeImageToBase64 } from '../lib/storage';
-import { MOOD_LABELS } from '../lib/constants';
+import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS, STATUS_LABELS } from '../lib/constants';
 import ConfirmModal from '../components/ConfirmModal';
 import Toast from '../components/Toast';
+import RosterLinkPicker from '../components/RosterLinkPicker';
 
 export default function Log() {
   const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry } = useData();
@@ -39,6 +40,7 @@ export default function Log() {
           weekNumber={activeTank.logs.length + 1}
           customFields={customFields}
           waterType={activeTank.waterType}
+          roster={activeTank.roster}
           onSubmit={(entry) => {
             addLogEntry(entry);
             setShowForm(false);
@@ -56,6 +58,7 @@ export default function Log() {
               initial={entry}
               customFields={customFields}
               waterType={activeTank.waterType}
+              roster={activeTank.roster}
               onSubmit={(updated) => {
                 updateLogEntry({ ...updated, id: entry.id, date: entry.date, weekLabel: entry.weekLabel });
                 setEditingId(null);
@@ -77,6 +80,9 @@ export default function Log() {
                   <p className="font-mono text-xs text-sand uppercase tracking-wide">
                     {entry.weekLabel} · {new Date(entry.date).toLocaleDateString()}
                     {entry.mood && <span className="ml-2">{MOOD_LABELS[entry.mood]}</span>}
+                    {entry.phase && (
+                      <span className="ml-2 text-amber">🧭 {LOG_PHASE_LABELS[entry.phase]}</span>
+                    )}
                     {entry.completedScheduleTaskIds && entry.completedScheduleTaskIds.length > 0 && (
                       <span className="ml-2 text-moss-light">
                         🔗 {entry.completedScheduleTaskIds.length} done
@@ -129,6 +135,24 @@ export default function Log() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {entry.additions && entry.additions.length > 0 && (
+                    <div>
+                      <p className="field-label mb-1.5">Roster items added this entry</p>
+                      <div className="flex flex-wrap gap-2">
+                        {entry.additions.map((link) => {
+                          const item = activeTank.roster.find((r) => r.id === link.rosterItemId);
+                          return (
+                            <span
+                              key={link.rosterItemId}
+                              className="pill py-1 px-2 font-mono text-xs bg-sand/15 border border-sand/20 text-sand"
+                            >
+                              📦 {item?.name ?? '(removed item)'} → {STATUS_LABELS[link.requiredStatus]}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {entry.completedScheduleTaskIds && entry.completedScheduleTaskIds.length > 0 && (
@@ -235,6 +259,7 @@ function EntryForm({
   weekNumber,
   customFields,
   waterType,
+  roster,
   onSubmit,
   onCancel,
   submitLabel,
@@ -244,6 +269,7 @@ function EntryForm({
   weekNumber?: number;
   customFields: CustomFieldDef[];
   waterType: 'freshwater' | 'saltwater';
+  roster: RosterItem[];
   onSubmit: (entry: LogEntry) => void;
   onCancel: () => void;
   submitLabel: string;
@@ -253,6 +279,8 @@ function EntryForm({
   const [entryLabel, setEntryLabel] = useState(initial?.weekLabel ?? `Entry ${weekNumber}`);
   const [body, setBody] = useState(initial?.body ?? '');
   const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood);
+  const [phase, setPhase] = useState<LogEntry['phase']>(initial?.phase);
+  const [additions, setAdditions] = useState<RosterLink[]>(initial?.additions ?? []);
   const [params, setParams] = useState<WaterParams>(initial?.params ?? {});
   const [customValues, setCustomValues] = useState<Record<string, CustomFieldValue>>(
     initial?.customValues ?? {}
@@ -301,6 +329,8 @@ function EntryForm({
       title: title.trim(),
       body: body.trim(),
       mood,
+      phase,
+      additions: additions.length ? additions : undefined,
       params,
       customValues: Object.keys(customValues).length ? customValues : undefined,
       photoUrls: photos.length ? photos : undefined,
@@ -354,6 +384,40 @@ function EntryForm({
             </button>
           ))}
         </div>
+      </div>
+
+      <div>
+        <p className="field-label">Build stage (optional)</p>
+        <p className="text-[11px] text-foam-dim/60 -mt-1 mb-2">
+          A separate axis from mood — where the build actually is, not how it feels. Leave unset
+          unless this entry marks a real stage transition.
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          {LOG_PHASE_ORDER.map((p) => (
+            <button
+              type="button"
+              key={p}
+              onClick={() => setPhase(phase === p ? undefined : p)}
+              className={`pill py-1.5 px-3 ${
+                phase === p
+                  ? 'bg-amber text-deepwater'
+                  : 'bg-deepwater-2 text-foam-dim border border-moss/30'
+              }`}
+            >
+              {LOG_PHASE_LABELS[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="field-label">Roster items added this entry (optional)</p>
+        <RosterLinkPicker
+          roster={roster}
+          links={additions}
+          onChange={setAdditions}
+          label="Roster items that reached this status as of this entry"
+        />
       </div>
 
       <div>

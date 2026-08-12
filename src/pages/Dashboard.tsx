@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { todayIso } from '../lib/date';
-import { MOOD_LABELS } from '../lib/constants';
+import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS } from '../lib/constants';
+import { currentPhase, tankPhaseDuration, formatTankAge } from '../lib/duration';
 import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '../lib/conceptImage';
 import { buildPlanSummary } from '../lib/planSummary';
 import type { CustomFieldValue } from '../types';
@@ -13,6 +14,8 @@ export default function Dashboard() {
   const [copiedPlan, setCopiedPlan] = useState(false);
   if (!activeTank) return null;
   const { roster, checklist, logs, customFields, schedule } = activeTank;
+  const phase = currentPhase(activeTank);
+  const phaseDuration = phase ? tankPhaseDuration(activeTank, phase) : null;
 
   function handleCopyImagePrompt(variant: 'simple' | 'detailed') {
     if (!activeTank) return;
@@ -146,6 +149,56 @@ export default function Dashboard() {
             {copiedPlan ? '✓ Copied to clipboard' : '📋 Copy plan summary'}
           </button>
         </div>
+      </section>
+
+      {/* Phases bar — where the tank actually is across the 6-stage build
+          sequence (Planning -> ... -> Established), tagged on Log
+          entries via LogEntry.phase. Distinct from "Build progress"
+          above, which tracks checklist task completion — a tank can be
+          100% checklist-complete and still be in an early phase, or vice
+          versa; they're not the same axis. */}
+      <section>
+        <p className="font-mono text-xs tracking-widest text-amber uppercase mb-2">Build stage</p>
+        {phase ? (
+          <>
+            <div className="flex items-center gap-1">
+              {LOG_PHASE_ORDER.map((p) => {
+                const currentIndex = LOG_PHASE_ORDER.indexOf(phase);
+                const i = LOG_PHASE_ORDER.indexOf(p);
+                const reached = i <= currentIndex;
+                const isCurrent = i === currentIndex;
+                return (
+                  <div key={p} className="flex-1 flex flex-col items-center gap-1.5">
+                    <div
+                      className={`h-2 w-full rounded-full ${
+                        reached ? 'bg-amber' : 'bg-deepwater border border-moss/30'
+                      }`}
+                    />
+                    <span
+                      className={`text-[9px] font-mono uppercase tracking-wide text-center ${
+                        isCurrent ? 'text-amber' : 'text-foam-dim/60'
+                      }`}
+                    >
+                      {LOG_PHASE_LABELS[p]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {phaseDuration && (
+              <p className="mt-3 text-sm text-foam-dim">
+                {formatTankAge(phaseDuration)} in {LOG_PHASE_LABELS[phase]}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-foam-dim">
+            Tag a phase on a Log entry to start tracking build stage.{' '}
+            <Link to="/log" className="text-amber hover:underline">
+              → log
+            </Link>
+          </p>
+        )}
       </section>
 
       {/* Stats row */}

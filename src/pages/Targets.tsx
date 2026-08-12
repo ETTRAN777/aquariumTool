@@ -85,7 +85,7 @@ export default function Targets() {
   }
 
   function copyPrompt(item: RosterItem) {
-    const prompt = buildResearchPrompt(item, tank.waterType);
+    const prompt = buildResearchPrompt(item, tank);
     navigator.clipboard
       .writeText(prompt)
       .then(() => {

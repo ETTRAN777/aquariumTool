@@ -7,6 +7,7 @@ import Roster from './pages/Roster';
 import Targets from './pages/Targets';
 import Checklist from './pages/Checklist';
 import Log from './pages/Log';
+import Timeline from './pages/Timeline';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import CreateTank from './pages/CreateTank';
@@ -58,6 +59,7 @@ function AppShell() {
           <Route path="/targets" element={<Targets />} />
           <Route path="/checklist" element={<Checklist />} />
           <Route path="/log" element={<Log />} />
+          <Route path="/timeline" element={<Timeline />} />
           <Route path="/schedule" element={<Schedule />} />
           <Route
             path="/charts"

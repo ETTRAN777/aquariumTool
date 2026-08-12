@@ -388,12 +388,51 @@ export function waterParamLabel(param: keyof WaterParams): string {
 // research question itself off to the user's own AI of choice, in a
 // format tuned to come back with the specific fields this page actually
 // uses.
-export function buildResearchPrompt(
-  item: RosterItem,
-  waterType: 'freshwater' | 'saltwater'
-): string {
+function formatTraitValue(v: CustomFieldValue): string {
+  return typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v);
+}
+
+// A field that already has a real saved value shouldn't be re-asked from
+// scratch — that risks the research contradicting something already
+// entered with no reconciliation, and wastes the answering AI's effort
+// on something that isn't actually missing. But blindly trusting a saved
+// value forever isn't right either (it could be stale, guessed, or
+// wrong) — so a saved value gets a VERIFY ask instead of an OMIT: state
+// what's currently on record and ask for a check/correction, rather than
+// silently skipping the field or silently trusting it.
+function verifyOrResearch(savedDisplay: string | undefined, verifyLabel: string, researchBullet: string): string {
+  return savedDisplay !== undefined
+    ? `- ${verifyLabel}: currently saved as ${savedDisplay} — please verify this is accurate, and correct it if not`
+    : `- ${researchBullet}`;
+}
+
+// TDS gets its own line, separate from the GH/KH/pH/temp bullet — those
+// measure real, identifiable things (Ca/Mg, carbonate alkalinity) a
+// source can meaningfully say a species "needs." TDS is a conductivity-
+// based aggregate of everything dissolved, including things with zero
+// biological relevance — a care sheet's "TDS 150-200" isn't reporting a
+// physiological requirement, it's a rough proxy. Framed that way in the
+// research ask itself (not just left implicit), while still asking for
+// it — the mineral-load cross-check (checkMineralLoadConsistency) needs
+// SOME TDS baseline to compare against, and if it's not in this prompt
+// at all, most people never fill it in and that whole check stays
+// permanently dormant. null for saltwater, where mineral content is
+// already tracked via salinity/specific gravity instead — same scoping
+// GH/KH already use.
+function buildTdsBullet(item: RosterItem, waterType: 'freshwater' | 'saltwater'): string | null {
+  if (waterType === 'saltwater') return null;
+  const t = item.waterParamTargets?.tds;
+  const saved = t && (t.min !== undefined || t.max !== undefined) ? `${t.min ?? '—'}–${t.max ?? '—'} ppm` : undefined;
+  return verifyOrResearch(
+    saved,
+    'Typical TDS range',
+    'Typical TDS range some hobbyists report for this species (ppm)* — note this is a rough proxy for total mineral content, not a physiological requirement the way GH/KH are. If sources don\'t really report this specifically, or disagree widely, say so rather than forcing a number.'
+  );
+}
+
+export function buildResearchPrompt(item: RosterItem, tank: Tank): string {
   const waterParamsList =
-    waterType === 'saltwater'
+    tank.waterType === 'saltwater'
       ? 'temperature (°F), pH, and salinity (specific gravity)'
       : 'temperature (°F), pH, GH (general hardness), and KH (carbonate hardness)';
 
@@ -408,15 +447,206 @@ export function buildResearchPrompt(
     'For any field marked with an asterisk (*), give one number. If your sources report a range instead of one figure, compute the midpoint yourself and keep the asterisk on your answer so it stays clear that\'s an averaged estimate, not a single number a source actually stated. Everything else (especially water parameters) should stay as real ranges where sources give them.';
 
   if (item.category === 'plant') {
-    return `Research ${item.name} for a planted aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source. ${averagingNote}
+    // Same combined-bullet approach as livestock's water parameters —
+    // split into "already saved, please verify" vs. "still missing,
+    // please research" rather than treating the whole group as one unit
+    // once any single one of them has a value.
+    const relevantParams: (keyof WaterParams)[] =
+      tank.waterType === 'saltwater' ? ['temperature', 'ph', 'salinity'] : ['temperature', 'ph', 'gh', 'kh'];
+    const savedParams: string[] = [];
+    const missingParams: string[] = [];
+    for (const p of relevantParams) {
+      const t = item.waterParamTargets?.[p];
+      if (t && (t.min !== undefined || t.max !== undefined)) {
+        savedParams.push(`${waterParamLabel(p)} ${t.min ?? '—'}–${t.max ?? '—'}`);
+      } else {
+        missingParams.push(waterParamLabel(p));
+      }
+    }
+    let waterParamsLine: string;
+    if (savedParams.length > 0 && missingParams.length === 0) {
+      waterParamsLine = `- Ideal water parameters: currently saved as ${savedParams.join(', ')} — please verify these are accurate, and correct any that aren't`;
+    } else if (savedParams.length > 0) {
+      waterParamsLine = `- Ideal water parameters: already have ${savedParams.join(', ')} (please verify/correct); still need — ${missingParams.join(', ')}`;
+    } else {
+      waterParamsLine = `- Ideal water parameters: ${waterParamsList}`;
+    }
+    const tdsBullet = buildTdsBullet(item, tank.waterType);
+    const tdsSaved =
+      item.waterParamTargets?.tds?.min !== undefined || item.waterParamTargets?.tds?.max !== undefined;
 
-- Ideal water parameters: ${waterParamsList}
-- Mature size (inches, height/spread)*
-- Light requirements (low/medium/high)
-- Whether CO2 injection is required or just beneficial
-- Typical growth rate (slow/medium/fast)`;
+    const matureSizeTrait = getTraitValue(item, '📏 Mature Size (in)');
+    const lightNeedsTrait = getTraitValue(item, '💡 Light Needs');
+    const co2Trait = getTraitValue(item, '🌫️ CO2 Required');
+    const growthRateTrait = getTraitValue(item, '🌱 Growth Rate');
+
+    const anySaved =
+      savedParams.length > 0 ||
+      tdsSaved ||
+      matureSizeTrait !== undefined ||
+      lightNeedsTrait !== undefined ||
+      co2Trait !== undefined ||
+      growthRateTrait !== undefined;
+    const verifyInstruction = anySaved
+      ? ' Some fields below already have a value saved — please verify those are accurate rather than skipping them, and correct anything that looks wrong.'
+      : '';
+
+    const bullets = [
+      waterParamsLine,
+      ...(tdsBullet ? [tdsBullet] : []),
+      verifyOrResearch(
+        matureSizeTrait !== undefined ? `${formatTraitValue(matureSizeTrait)} in` : undefined,
+        'Mature size (height/spread)',
+        'Mature size (inches, height/spread)*'
+      ),
+      verifyOrResearch(
+        lightNeedsTrait !== undefined ? formatTraitValue(lightNeedsTrait) : undefined,
+        'Light requirements',
+        'Light requirements (low/medium/high)'
+      ),
+      verifyOrResearch(
+        co2Trait !== undefined ? formatTraitValue(co2Trait) : undefined,
+        'CO2 injection required (vs. just beneficial)',
+        'Whether CO2 injection is required or just beneficial'
+      ),
+      verifyOrResearch(
+        growthRateTrait !== undefined ? formatTraitValue(growthRateTrait) : undefined,
+        'Typical growth rate',
+        'Typical growth rate (slow/medium/fast)'
+      ),
+    ];
+
+    return `Research ${item.name} for a planted aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source.${verifyInstruction} ${averagingNote}
+
+${bullets.join('\n')}`;
   }
 
+  if (item.category === 'livestock') {
+    const quantity = item.quantity ?? 1;
+    const qtyPhrase = quantity > 1 ? `${quantity} of them` : 'one';
+    let tankSizeDetail = `${tank.sizeGallons}-gallon tank`;
+    if (tank.lengthIn && tank.widthIn) {
+      tankSizeDetail += ` (${tank.lengthIn}" × ${tank.widthIn}")`;
+    } else if (tank.dimensions) {
+      tankSizeDetail += ` (${tank.dimensions})`;
+    }
+
+    // Water parameters as one combined bullet, since they move together
+    // in practice — but still split into "already saved, please verify"
+    // vs. "still missing, please research" rather than treating the
+    // whole group as one unit once ANY of them has a value.
+    const relevantParams: (keyof WaterParams)[] =
+      tank.waterType === 'saltwater' ? ['temperature', 'ph', 'salinity'] : ['temperature', 'ph', 'gh', 'kh'];
+    const savedParams: string[] = [];
+    const missingParams: string[] = [];
+    for (const p of relevantParams) {
+      const t = item.waterParamTargets?.[p];
+      if (t && (t.min !== undefined || t.max !== undefined)) {
+        savedParams.push(`${waterParamLabel(p)} ${t.min ?? '—'}–${t.max ?? '—'}`);
+      } else {
+        missingParams.push(waterParamLabel(p));
+      }
+    }
+    let waterParamsLine: string;
+    if (savedParams.length > 0 && missingParams.length === 0) {
+      waterParamsLine = `- Ideal water parameters: currently saved as ${savedParams.join(', ')} — please verify these are accurate, and correct any that aren't`;
+    } else if (savedParams.length > 0) {
+      waterParamsLine = `- Ideal water parameters: already have ${savedParams.join(', ')} (please verify/correct); still need — ${missingParams.join(', ')}`;
+    } else {
+      waterParamsLine = `- Ideal water parameters: ${waterParamsList}`;
+    }
+    const tdsBullet = buildTdsBullet(item, tank.waterType);
+    const tdsSaved =
+      item.waterParamTargets?.tds?.min !== undefined || item.waterParamTargets?.tds?.max !== undefined;
+
+    const finNipperTrait = getTraitValue(item, '✂️ Fin Nipper');
+    const longFinsTrait = getTraitValue(item, '🎗️ Long/Flowing Fins');
+    const eatsPlantsTrait = getTraitValue(item, '🌿 Eats/Uproots Plants');
+    const temperamentTrait = getTraitValue(item, '😊 Temperament');
+    const minGroupTrait = getTraitValue(item, '👥 Min Group Size');
+    const minLengthTrait = getTraitValue(item, '📐 Min Tank Length (in)');
+    const minWidthTrait = getTraitValue(item, '📐 Min Tank Width (in)');
+
+    const bullets = [
+      waterParamsLine,
+      ...(tdsBullet ? [tdsBullet] : []),
+      verifyOrResearch(
+        item.mouthSizeMm !== undefined ? `${item.mouthSizeMm} mm` : undefined,
+        'Typical adult mouth size',
+        'Typical adult mouth size (mm)* — relevant for assessing predation risk to shrimp/small inverts'
+      ),
+      verifyOrResearch(
+        item.adultSizeIn !== undefined ? `${item.adultSizeIn} in` : undefined,
+        'Typical adult size',
+        'Typical adult size (inches)*'
+      ),
+      verifyOrResearch(
+        minGroupTrait !== undefined ? formatTraitValue(minGroupTrait) : undefined,
+        'Minimum group/shoal size',
+        'Minimum group/shoal size this species actually needs to thrive*, or "not a shoaling species" if that\'s genuinely not a thing for it'
+      ),
+      verifyOrResearch(
+        minLengthTrait !== undefined ? `${formatTraitValue(minLengthTrait)} in` : undefined,
+        'Minimum tank length this species needs',
+        'Minimum tank length (inches) this species needs*, if it\'s more than just "fits in any tank big enough for its own body size" — otherwise say so'
+      ),
+      verifyOrResearch(
+        minWidthTrait !== undefined ? `${formatTraitValue(minWidthTrait)} in` : undefined,
+        'Minimum tank width this species needs',
+        'Minimum tank width (inches) this species needs*, same caveat'
+      ),
+      '- Given the tank size and quantity above, any fit or stocking-density concerns worth flagging',
+      verifyOrResearch(
+        longFinsTrait !== undefined ? formatTraitValue(longFinsTrait) : undefined,
+        'Has long, flowing fins that make it a fin-nipping target',
+        'Whether it has long, flowing fins that make it a fin-nipping target (yes/no)'
+      ),
+      verifyOrResearch(
+        finNipperTrait !== undefined ? formatTraitValue(finNipperTrait) : undefined,
+        'Reputation for fin-nipping behavior',
+        'Reputation for fin-nipping behavior (yes/no, with reasoning)'
+      ),
+      verifyOrResearch(
+        eatsPlantsTrait !== undefined ? formatTraitValue(eatsPlantsTrait) : undefined,
+        'Eats or uproots live aquarium plants',
+        'Whether it eats or uproots live aquarium plants (yes/no)'
+      ),
+      // No stored field to check against — shrimp-safety is DERIVED from
+      // mouth/adult size elsewhere in the app (see targetTraitPresets.ts),
+      // never entered directly, so there's nothing to verify here.
+      "- Whether it's considered safe to keep with shrimp/inverts (yes/no, with reasoning)",
+      verifyOrResearch(
+        temperamentTrait !== undefined ? formatTraitValue(temperamentTrait) : undefined,
+        'General temperament',
+        'General temperament (e.g. peaceful, semi-aggressive, aggressive, predatory)'
+      ),
+    ];
+
+    const anySaved =
+      savedParams.length > 0 ||
+      tdsSaved ||
+      item.mouthSizeMm !== undefined ||
+      item.adultSizeIn !== undefined ||
+      minGroupTrait !== undefined ||
+      minLengthTrait !== undefined ||
+      minWidthTrait !== undefined ||
+      finNipperTrait !== undefined ||
+      longFinsTrait !== undefined ||
+      eatsPlantsTrait !== undefined ||
+      temperamentTrait !== undefined;
+    const verifyInstruction = anySaved
+      ? ' Some fields below already have a value saved — please verify those are accurate rather than skipping them, and correct anything that looks wrong.'
+      : '';
+
+    return `Research ${item.name} for a home aquarium. I'm planning to keep ${qtyPhrase} in a ${tankSizeDetail}. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source.${verifyInstruction} ${averagingNote}
+
+${bullets.join('\n')}`;
+  }
+
+  // hardscape/substrate/equipment items don't currently get a tailored
+  // prompt — falls through to the same general-purpose one plants and
+  // livestock used before this split, kept as a reasonable default
+  // rather than leaving these categories with no prompt at all.
   return `Research ${item.name} for a home aquarium. Please give specific numeric ranges where possible, and note your confidence on anything that varies a lot by source. ${averagingNote}
 
 - Ideal water parameters: ${waterParamsList}

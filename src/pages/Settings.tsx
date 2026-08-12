@@ -26,6 +26,7 @@ export default function Settings() {
   const [waterType, setWaterType] = useState<'freshwater' | 'saltwater'>(
     activeTank?.waterType ?? 'freshwater'
   );
+  const [startDate, setStartDate] = useState(activeTank?.startDate ?? '');
 
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('number');
@@ -46,6 +47,7 @@ export default function Settings() {
       widthIn: widthIn.trim() ? Number(widthIn) : undefined,
       style: style.trim() || undefined,
       waterType,
+      startDate: startDate.trim(),
     });
   }
 
@@ -151,7 +153,7 @@ export default function Settings() {
             )}
           </div>
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-3 gap-3">
           <div>
             <label className="field-label">Length (in, optional)</label>
             <input
@@ -169,6 +171,18 @@ export default function Settings() {
               onChange={(e) => setWidthIn(e.target.value)}
               className="field"
             />
+          </div>
+          <div>
+            <label className="field-label">Start date (optional)</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="field"
+            />
+            <p className="text-[11px] text-foam-dim/60 mt-1">
+              Powers Timeline's "Your Tank is X old" and the Dashboard's build-stage duration.
+            </p>
           </div>
         </div>
         <p className="text-[11px] text-foam-dim/70 -mt-2">

@@ -102,10 +102,13 @@ export type MilestoneType = 'phase-change' | 'roster-addition' | 'health-event' 
 export interface Milestone {
   id: string;
   title: string;
-  // Left blank, 15c generates templated fallback copy keyed off `type`
-  // (and off the linked log entry's mood, for phase-change regressions) —
-  // never a fabricated reason ("you decided your tank needed another
-  // look" asserts a motive with no basis). Computed facts only.
+  // Left blank for every auto-created milestone (phase-change and
+  // roster-addition, both created without any hand-typed text) — 15c's
+  // buildFallbackDescription generates display copy from `type`/`major`/
+  // the linked entry's mood at READ time, not baked in at creation, so
+  // editing a linked entry's mood later changes what's shown without
+  // touching this record. Never a fabricated reason — computed facts
+  // only.
   description?: string;
   date: string; // ISO date
   type: MilestoneType;
@@ -120,9 +123,16 @@ export interface Milestone {
   // already happened.
   relatedRosterItemIds?: string[];
   // The log entry this milestone was detected from or attached to, if
-  // any — set for auto-suggested phase-regression milestones, absent for
-  // ones created by hand.
+  // any — set for auto-created phase-change/roster-addition milestones,
+  // absent for ones created by hand.
   linkedLogEntryId?: string;
+  // Whether this is one of the "spine" moments worth standing out from
+  // the rest (vs. a real but quieter one) — always true for phase-change,
+  // true for a livestock item's first appearance, true only for the
+  // first-ever addition within each non-livestock category, unset/false
+  // otherwise. See detectPhaseChangeMilestone/detectRosterAdditionMilestones
+  // in lib/milestones.ts for the exact rules.
+  major?: boolean;
 }
 
 export interface ChecklistTask {

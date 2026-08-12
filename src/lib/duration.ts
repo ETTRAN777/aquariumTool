@@ -137,3 +137,27 @@ export function currentPhase(tank: Tank): LogPhase | undefined {
   const latest = tagged.reduce((a, b) => (b.date > a.date ? b : a));
   return latest.phase;
 }
+
+// Cascades a CalendarDuration down to a human-readable "tank age" string,
+// starting from the largest non-zero unit (up to years) and always
+// running through week + day once expanded past a single unit — e.g.
+// "Week 6 Day 5", or "Year 1 Month 2 Week 0 Day 4" once a tank's old
+// enough for those units to matter. Appends the raw total day count in
+// parentheses once expanded, since a number like "(2000 Days)" is
+// genuinely striking at that scale, not just a repeat of what's already
+// shown — but collapses to a bare "Day N" with no parenthetical when the
+// tank isn't even a week old, since "(5 Days)" right next to "Day 5"
+// would just be echoing the same number back. Reused as-is for both the
+// milestone-description day-count prefix and Timeline's planned "Your
+// Tank is X old" line — one formatter, not two.
+export function formatTankAge(d: CalendarDuration): string {
+  if (d.totalDays < 7) {
+    return `Day ${d.totalDays}`;
+  }
+  const parts: string[] = [];
+  if (d.years > 0) parts.push(`Year ${d.years}`);
+  if (d.years > 0 || d.months > 0) parts.push(`Month ${d.months}`);
+  parts.push(`Week ${d.weeks}`);
+  parts.push(`Day ${d.days}`);
+  return `${parts.join(' ')} (${d.totalDays} Days)`;
+}

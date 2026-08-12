@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef, ScheduleTask } from '../types';
+import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef, ScheduleTask, Milestone } from '../types';
 import { loadData, saveData } from './storage';
 import { todayIso, addDays, toIsoDate } from './date';
+import { recomputeAutoMilestones } from './milestones';
 
 interface DataContextValue {
   data: AppData;
@@ -23,6 +24,9 @@ interface DataContextValue {
   updateScheduleTask: (task: ScheduleTask) => void;
   deleteScheduleTask: (id: string) => void;
   completeScheduleTask: (id: string) => void;
+  addMilestone: (milestone: Milestone) => void;
+  updateMilestone: (milestone: Milestone) => void;
+  deleteMilestone: (id: string) => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -130,20 +134,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
           }
         : entry;
 
-    updateTank({ ...activeTank, logs: [finalEntry, ...activeTank.logs] });
+    // 15c/15d: silent, no confirmation step — milestones are fully
+    // recomputed from the tank's POST-save log state on every save
+    // (add/update/delete), not appended incrementally. This is what
+    // makes them reactive: deleting or editing the entry that triggered
+    // one makes it disappear/update on the next save, rather than being
+    // permanently stuck. See recomputeAutoMilestones' own comment for
+    // exactly what's preserved (hand-edited title/description/major) vs.
+    // recomputed fresh.
+    const nextLogs = [finalEntry, ...activeTank.logs];
+    updateTank({
+      ...activeTank,
+      logs: nextLogs,
+      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
+    });
   }
 
   function updateLogEntry(entry: LogEntry) {
     if (!activeTank) return;
+    const nextLogs = activeTank.logs.map((l) => (l.id === entry.id ? entry : l));
     updateTank({
       ...activeTank,
-      logs: activeTank.logs.map((l) => (l.id === entry.id ? entry : l)),
+      logs: nextLogs,
+      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
     });
   }
 
   function deleteLogEntry(id: string) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, logs: activeTank.logs.filter((l) => l.id !== id) });
+    const nextLogs = activeTank.logs.filter((l) => l.id !== id);
+    updateTank({
+      ...activeTank,
+      logs: nextLogs,
+      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
+    });
   }
 
   function addScheduleTask(task: ScheduleTask) {
@@ -162,6 +186,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
   function deleteScheduleTask(id: string) {
     if (!activeTank) return;
     updateTank({ ...activeTank, schedule: activeTank.schedule.filter((t) => t.id !== id) });
+  }
+
+  // Manual milestone CRUD — for Timeline's "+ Add milestone" and its
+  // edit/delete affordances. Distinct from the auto-creation in
+  // addLogEntry/updateLogEntry above: those are silent and system-
+  // generated (phase-change, roster-addition); these are the ones a
+  // person actually types in themselves (health-event, custom, or a
+  // manually-recorded phase-change/roster-addition with no linked entry
+  // at all — e.g. "ordered the founding shrimp" before anything's
+  // arrived to tag a log entry with).
+  function addMilestone(milestone: Milestone) {
+    if (!activeTank) return;
+    updateTank({ ...activeTank, milestones: [...activeTank.milestones, milestone] });
+  }
+
+  function updateMilestone(milestone: Milestone) {
+    if (!activeTank) return;
+    updateTank({
+      ...activeTank,
+      milestones: activeTank.milestones.map((m) => (m.id === milestone.id ? milestone : m)),
+    });
+  }
+
+  function deleteMilestone(id: string) {
+    if (!activeTank) return;
+    updateTank({ ...activeTank, milestones: activeTank.milestones.filter((m) => m.id !== id) });
   }
 
   // Marking a task done: recurring tasks roll dueDate forward by
@@ -248,6 +298,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateScheduleTask,
         deleteScheduleTask,
         completeScheduleTask,
+        addMilestone,
+        updateMilestone,
+        deleteMilestone,
       }}
     >
       {children}
