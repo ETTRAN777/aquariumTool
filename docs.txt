@@ -554,6 +554,7 @@ A notable, dated moment in the tank's build (e.g. "Cycling complete," "Founding 
 | phase | string | no | Only set when `type` is `"phase-change"` — same six values as `LogEntry.phase` above |
 | relatedRosterItemIds | array of string | no | `RosterItem.id` values this milestone is about |
 | linkedLogEntryId | string | no | A `LogEntry.id`, if this milestone is tied to a specific log entry |
+| major | boolean | no | Whether this is one of the standout "spine" moments (vs. a real but quieter one) — shown bigger, and in Timeline's horizontal "major milestones" strip. This is a judgment call the app derives automatically from real rules (first livestock item, first-ever item in a non-livestock category, any phase change) for milestones it creates itself — don't guess it for a hand-authored one; leave it omitted/false unless the user explicitly calls something out as a standout moment |
 
 ## Generation guidelines
 
