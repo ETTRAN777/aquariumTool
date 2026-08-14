@@ -227,7 +227,7 @@ export default function Timeline() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h2 className="font-display text-2xl font-semibold">Timeline</h2>
         <p className="text-sm text-foam-dim mt-1">
