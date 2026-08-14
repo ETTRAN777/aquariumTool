@@ -64,20 +64,22 @@ export default function Checklist() {
   }
 
   function moveTask(id: string, direction: 'up' | 'down') {
-    const idx = checklist.findIndex((c) => c.id === id);
-    const swapWith = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapWith < 0 || swapWith >= checklist.length) return;
+    updateTank((tank) => {
+      const idx = tank.checklist.findIndex((c) => c.id === id);
+      const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+      if (idx === -1 || swapWith < 0 || swapWith >= tank.checklist.length) return tank;
 
-    const reordered = [...checklist];
-    [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
+      const reordered = [...tank.checklist];
+      [reordered[idx], reordered[swapWith]] = [reordered[swapWith], reordered[idx]];
 
-    if (!isOrderValid(reordered)) {
-      setToastMessage(
-        "Can't move a step ahead of something it depends on — remove that dependency first if you want to reorder it."
-      );
-      return;
-    }
-    updateTank({ ...tank, checklist: reordered });
+      if (!isOrderValid(reordered)) {
+        setToastMessage(
+          "Can't move a step ahead of something it depends on — remove that dependency first if you want to reorder it."
+        );
+        return tank;
+      }
+      return { ...tank, checklist: reordered };
+    });
   }
 
   function addTask(e: React.FormEvent) {
@@ -91,7 +93,7 @@ export default function Checklist() {
       dependsOn: newDeps.length ? newDeps : undefined,
       rosterLinks: newRosterLinks.length ? newRosterLinks : undefined,
     };
-    updateTank({ ...tank, checklist: [...checklist, newTask] });
+    updateTank((tank) => ({ ...tank, checklist: [...tank.checklist, newTask] }));
     setNewLabel('');
     setNewDetail('');
     setNewDeps([]);
@@ -100,24 +102,28 @@ export default function Checklist() {
   }
 
   function removeTask(id: string) {
-    updateTank({
+    updateTank((tank) => ({
       ...tank,
-      checklist: checklist
+      checklist: tank.checklist
         .filter((c) => c.id !== id)
         .map((c) => ({ ...c, dependsOn: c.dependsOn?.filter((d) => d !== id) })),
-    });
+    }));
   }
 
   function saveEdit(updated: ChecklistTask) {
-    const nextList = checklist.map((c) => (c.id === updated.id ? updated : c));
-    if (!isOrderValid(nextList)) {
-      setToastMessage(
-        "That dependency would put this step behind something later in the list. Move the step down first, or pick a different dependency."
-      );
-      return;
-    }
-    updateTank({ ...tank, checklist: nextList });
-    setEditingId(null);
+    let succeeded = false;
+    updateTank((tank) => {
+      const nextList = tank.checklist.map((c) => (c.id === updated.id ? updated : c));
+      if (!isOrderValid(nextList)) {
+        setToastMessage(
+          "That dependency would put this step behind something later in the list. Move the step down first, or pick a different dependency."
+        );
+        return tank;
+      }
+      succeeded = true;
+      return { ...tank, checklist: nextList };
+    });
+    if (succeeded) setEditingId(null);
   }
 
   const doneCount = checklist.filter((c) => c.done).length;
@@ -426,4 +432,3 @@ function EditForm({
     </form>
   );
 }
-

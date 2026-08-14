@@ -8,6 +8,7 @@ import type { Milestone, MilestoneType, LogEntry, LogPhase, RosterItem } from '.
 import { LOG_PHASE_LABELS, LOG_PHASE_ORDER, MOOD_LABELS } from '../lib/constants';
 import { tankLifetimeDuration, formatTankAge } from '../lib/duration';
 import { buildFallbackDescription } from '../lib/milestones';
+import { buildProgressCheckPrompt } from '../lib/planSummary';
 
 const MILESTONE_TYPE_LABELS: Record<MilestoneType, string> = {
   'phase-change': 'Phase change',
@@ -90,6 +91,7 @@ export default function Timeline() {
   const { activeTank, addMilestone, updateMilestone, deleteMilestone } = useData();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [copiedProgressCheck, setCopiedProgressCheck] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
   const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
@@ -122,6 +124,18 @@ export default function Timeline() {
       else next.add(id);
       return next;
     });
+  }
+
+  function copyProgressCheckPrompt() {
+    if (!activeTank) return;
+    const prompt = buildProgressCheckPrompt(activeTank);
+    navigator.clipboard
+      .writeText(prompt)
+      .then(() => {
+        setCopiedProgressCheck(true);
+        setTimeout(() => setCopiedProgressCheck(false), 2000);
+      })
+      .catch(() => {});
   }
 
   if (!activeTank) return null;
@@ -245,6 +259,12 @@ export default function Timeline() {
             </>
           )}
         </p>
+        <button
+          onClick={copyProgressCheckPrompt}
+          className="mt-2 font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedProgressCheck ? '✓ Copied to clipboard' : '📈 Copy progress check prompt'}
+        </button>
       </div>
 
       {/* Major milestones — proportional axis line, the "greatest hits"

@@ -8,7 +8,7 @@ interface DataContextValue {
   data: AppData;
   setData: (data: AppData) => void;
   activeTank: Tank | undefined;
-  updateTank: (tank: Tank) => void;
+  updateTank: (tankOrUpdater: Tank | ((prev: Tank) => Tank)) => void;
   createTank: (tank: Tank) => void;
   deleteTank: (id: string) => void;
   setActiveTankId: (id: string) => void;
@@ -44,11 +44,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setDataState(next);
   }
 
-  function updateTank(tank: Tank) {
-    setDataState((prev) => ({
-      ...prev,
-      tanks: prev.tanks.map((t) => (t.id === tank.id ? tank : t)),
-    }));
+  // Accepts either a full replacement Tank (fine for a single, deliberate
+  // action that already holds fresh state — e.g. a form's one "Save"
+  // click) or an updater function resolved against the LATEST tank state
+  // at the moment this update actually applies. The updater form is what
+  // makes rapid, back-to-back updates safe — e.g. starring several
+  // roster items in quick succession, or clicking a checklist reorder
+  // arrow repeatedly. Every function below that mutates the active tank
+  // uses the updater form: each call resolves against whatever the
+  // previous call already committed, rather than a snapshot
+  // (activeTank, captured once per render) that can already be stale by
+  // the time a later call in the same rapid sequence actually runs.
+  // Building a whole next-Tank object from a stale snapshot and handing
+  // it to setState is real data loss, not a display glitch — confirmed
+  // exactly this way: starring multiple roster items quickly silently
+  // dropped some of them, because each click's updateRosterItem call
+  // captured whatever activeTank was at THAT render, and a later click's
+  // update — built from an earlier, still-stale snapshot — overwrote the
+  // whole tank and discarded the earlier click's change along with it.
+  function updateTank(tankOrUpdater: Tank | ((prev: Tank) => Tank)) {
+    setDataState((prev) => {
+      if (typeof tankOrUpdater === 'function') {
+        const current = prev.tanks.find((t) => t.id === prev.activeTankId);
+        if (!current) return prev;
+        const next = tankOrUpdater(current);
+        return { ...prev, tanks: prev.tanks.map((t) => (t.id === next.id ? next : t)) };
+      }
+      return { ...prev, tanks: prev.tanks.map((t) => (t.id === tankOrUpdater.id ? tankOrUpdater : t)) };
+    });
   }
 
   function createTank(tank: Tank) {
@@ -78,35 +101,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   function setCustomFields(fields: CustomFieldDef[]) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, customFields: fields });
+    updateTank((tank) => ({ ...tank, customFields: fields }));
   }
 
   function addRosterItem(item: RosterItem) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, roster: [...activeTank.roster, item] });
+    updateTank((tank) => ({ ...tank, roster: [...tank.roster, item] }));
   }
 
   function updateRosterItem(item: RosterItem) {
     if (!activeTank) return;
-    updateTank({
-      ...activeTank,
-      roster: activeTank.roster.map((r) => (r.id === item.id ? item : r)),
-    });
+    updateTank((tank) => ({
+      ...tank,
+      roster: tank.roster.map((r) => (r.id === item.id ? item : r)),
+    }));
   }
 
   function deleteRosterItem(id: string) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, roster: activeTank.roster.filter((r) => r.id !== id) });
+    updateTank((tank) => ({ ...tank, roster: tank.roster.filter((r) => r.id !== id) }));
   }
 
   function toggleTask(id: string) {
     if (!activeTank) return;
-    updateTank({
-      ...activeTank,
-      checklist: activeTank.checklist.map((c) =>
-        c.id === id ? { ...c, done: !c.done } : c
-      ),
-    });
+    updateTank((tank) => ({
+      ...tank,
+      checklist: tank.checklist.map((c) => (c.id === id ? { ...c, done: !c.done } : c)),
+    }));
   }
 
   // completeScheduleTask links forward (task completed -> today's log, if it
@@ -117,75 +138,78 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // works regardless of which happens first.
   function addLogEntry(entry: LogEntry) {
     if (!activeTank) return;
+    updateTank((tank) => {
+      const entryDay = toIsoDate(new Date(entry.date));
+      const alreadyLinkedIds = new Set(tank.logs.flatMap((l) => l.completedScheduleTaskIds ?? []));
+      const matchingTaskIds = tank.schedule
+        .filter((t) => t.lastCompletedDate === entryDay && !alreadyLinkedIds.has(t.id))
+        .map((t) => t.id);
 
-    const entryDay = toIsoDate(new Date(entry.date));
-    const alreadyLinkedIds = new Set(
-      activeTank.logs.flatMap((l) => l.completedScheduleTaskIds ?? [])
-    );
-    const matchingTaskIds = activeTank.schedule
-      .filter((t) => t.lastCompletedDate === entryDay && !alreadyLinkedIds.has(t.id))
-      .map((t) => t.id);
+      const finalEntry =
+        matchingTaskIds.length > 0
+          ? {
+              ...entry,
+              completedScheduleTaskIds: [...(entry.completedScheduleTaskIds ?? []), ...matchingTaskIds],
+            }
+          : entry;
 
-    const finalEntry =
-      matchingTaskIds.length > 0
-        ? {
-            ...entry,
-            completedScheduleTaskIds: [...(entry.completedScheduleTaskIds ?? []), ...matchingTaskIds],
-          }
-        : entry;
-
-    // 15c/15d: silent, no confirmation step — milestones are fully
-    // recomputed from the tank's POST-save log state on every save
-    // (add/update/delete), not appended incrementally. This is what
-    // makes them reactive: deleting or editing the entry that triggered
-    // one makes it disappear/update on the next save, rather than being
-    // permanently stuck. See recomputeAutoMilestones' own comment for
-    // exactly what's preserved (hand-edited title/description/major) vs.
-    // recomputed fresh.
-    const nextLogs = [finalEntry, ...activeTank.logs];
-    updateTank({
-      ...activeTank,
-      logs: nextLogs,
-      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
+      // 15c/15d: silent, no confirmation step — milestones are fully
+      // recomputed from the tank's POST-save log state on every save
+      // (add/update/delete), not appended incrementally. This is what
+      // makes them reactive: deleting or editing the entry that
+      // triggered one makes it disappear/update on the next save,
+      // rather than being permanently stuck. See recomputeAutoMilestones'
+      // own comment for exactly what's preserved (hand-edited title/
+      // description/major) vs. recomputed fresh.
+      const nextLogs = [finalEntry, ...tank.logs];
+      return {
+        ...tank,
+        logs: nextLogs,
+        milestones: recomputeAutoMilestones({ ...tank, logs: nextLogs }),
+      };
     });
   }
 
   function updateLogEntry(entry: LogEntry) {
     if (!activeTank) return;
-    const nextLogs = activeTank.logs.map((l) => (l.id === entry.id ? entry : l));
-    updateTank({
-      ...activeTank,
-      logs: nextLogs,
-      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
+    updateTank((tank) => {
+      const nextLogs = tank.logs.map((l) => (l.id === entry.id ? entry : l));
+      return {
+        ...tank,
+        logs: nextLogs,
+        milestones: recomputeAutoMilestones({ ...tank, logs: nextLogs }),
+      };
     });
   }
 
   function deleteLogEntry(id: string) {
     if (!activeTank) return;
-    const nextLogs = activeTank.logs.filter((l) => l.id !== id);
-    updateTank({
-      ...activeTank,
-      logs: nextLogs,
-      milestones: recomputeAutoMilestones({ ...activeTank, logs: nextLogs }),
+    updateTank((tank) => {
+      const nextLogs = tank.logs.filter((l) => l.id !== id);
+      return {
+        ...tank,
+        logs: nextLogs,
+        milestones: recomputeAutoMilestones({ ...tank, logs: nextLogs }),
+      };
     });
   }
 
   function addScheduleTask(task: ScheduleTask) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, schedule: [...activeTank.schedule, task] });
+    updateTank((tank) => ({ ...tank, schedule: [...tank.schedule, task] }));
   }
 
   function updateScheduleTask(task: ScheduleTask) {
     if (!activeTank) return;
-    updateTank({
-      ...activeTank,
-      schedule: activeTank.schedule.map((t) => (t.id === task.id ? task : t)),
-    });
+    updateTank((tank) => ({
+      ...tank,
+      schedule: tank.schedule.map((t) => (t.id === task.id ? task : t)),
+    }));
   }
 
   function deleteScheduleTask(id: string) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, schedule: activeTank.schedule.filter((t) => t.id !== id) });
+    updateTank((tank) => ({ ...tank, schedule: tank.schedule.filter((t) => t.id !== id) }));
   }
 
   // Manual milestone CRUD — for Timeline's "+ Add milestone" and its
@@ -198,20 +222,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // arrived to tag a log entry with).
   function addMilestone(milestone: Milestone) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, milestones: [...activeTank.milestones, milestone] });
+    updateTank((tank) => ({ ...tank, milestones: [...tank.milestones, milestone] }));
   }
 
   function updateMilestone(milestone: Milestone) {
     if (!activeTank) return;
-    updateTank({
-      ...activeTank,
-      milestones: activeTank.milestones.map((m) => (m.id === milestone.id ? milestone : m)),
-    });
+    updateTank((tank) => ({
+      ...tank,
+      milestones: tank.milestones.map((m) => (m.id === milestone.id ? milestone : m)),
+    }));
   }
 
   function deleteMilestone(id: string) {
     if (!activeTank) return;
-    updateTank({ ...activeTank, milestones: activeTank.milestones.filter((m) => m.id !== id) });
+    updateTank((tank) => ({ ...tank, milestones: tank.milestones.filter((m) => m.id !== id) }));
   }
 
   // Marking a task done: recurring tasks roll dueDate forward by
@@ -234,46 +258,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // happens on its own.
   function completeScheduleTask(id: string) {
     if (!activeTank) return;
-    const task = activeTank.schedule.find((t) => t.id === id);
-    if (!task) return;
+    updateTank((tank) => {
+      const task = tank.schedule.find((t) => t.id === id);
+      if (!task) return tank;
 
-    const today = todayIso();
+      const today = todayIso();
 
-    const schedule = activeTank.schedule.map((t) => {
-      if (t.id !== id) return t;
-      if (t.recurrenceDays) {
-        let next = t.dueDate;
-        do {
-          next = addDays(next, t.recurrenceDays);
-        } while (next < today);
-        // Rolling forward would push past the series' own end date — treat
-        // this completion as the last one instead of producing a dueDate
-        // beyond the boundary the user set.
-        if (t.endDate && next > t.endDate) {
-          return { ...t, done: true, lastCompletedDate: today };
+      const schedule = tank.schedule.map((t) => {
+        if (t.id !== id) return t;
+        if (t.recurrenceDays) {
+          let next = t.dueDate;
+          do {
+            next = addDays(next, t.recurrenceDays);
+          } while (next < today);
+          // Rolling forward would push past the series' own end date —
+          // treat this completion as the last one instead of producing
+          // a dueDate beyond the boundary the user set.
+          if (t.endDate && next > t.endDate) {
+            return { ...t, done: true, lastCompletedDate: today };
+          }
+          return { ...t, dueDate: next, lastCompletedDate: today };
         }
-        return { ...t, dueDate: next, lastCompletedDate: today };
-      }
-      return { ...t, done: true, lastCompletedDate: today };
+        return { ...t, done: true, lastCompletedDate: today };
+      });
+
+      // l.date is a full timestamp (new Date().toISOString()), so it's
+      // converted to its own local calendar day rather than sliced as a
+      // UTC string — otherwise a log made late in the evening could
+      // compare as "yesterday" against today's local date and silently
+      // fail to link.
+      const matchingLog = tank.logs.find((l) => toIsoDate(new Date(l.date)) === today);
+      const logs = matchingLog
+        ? tank.logs.map((l) =>
+            l.id === matchingLog.id
+              ? { ...l, completedScheduleTaskIds: [...(l.completedScheduleTaskIds ?? []), id] }
+              : l
+          )
+        : tank.logs;
+
+      return { ...tank, schedule, logs };
     });
-
-    // l.date is a full timestamp (new Date().toISOString()), so it's
-    // converted to its own local calendar day rather than sliced as a UTC
-    // string — otherwise a log made late in the evening could compare as
-    // "yesterday" against today's local date and silently fail to link.
-    const matchingLog = activeTank.logs.find((l) => toIsoDate(new Date(l.date)) === today);
-    const logs = matchingLog
-      ? activeTank.logs.map((l) =>
-          l.id === matchingLog.id
-            ? {
-                ...l,
-                completedScheduleTaskIds: [...(l.completedScheduleTaskIds ?? []), id],
-              }
-            : l
-        )
-      : activeTank.logs;
-
-    updateTank({ ...activeTank, schedule, logs });
   }
 
   return (

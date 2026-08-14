@@ -8,6 +8,26 @@ import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '
 import { buildPlanSummary } from '../lib/planSummary';
 import type { CustomFieldValue } from '../types';
 
+// Compact relative phrasing for the Dashboard's "last milestone" glance —
+// deliberately not formatTankAge's cascading "Week 3 Day 2" format, which
+// is built for absolute "how old is this" framing, not "X ago" prose.
+function timeAgo(dateStr: string): string {
+  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) {
+    const weeks = Math.floor(days / 7);
+    return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  }
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return `${months} month${months === 1 ? '' : 's'} ago`;
+  }
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+}
+
 export default function Dashboard() {
   const { activeTank } = useData();
   const [copiedPrompt, setCopiedPrompt] = useState<'simple' | 'detailed' | null>(null);
@@ -199,6 +219,22 @@ export default function Dashboard() {
             </Link>
           </p>
         )}
+        {(() => {
+          // A quiet pointer toward Timeline, not a duplicate of it — the
+          // Phases bar above says WHERE the tank is; this says WHAT last
+          // happened. Deliberately just one line, no card, no details.
+          const latest = [...activeTank.milestones].sort((a, b) => (b.date > a.date ? 1 : -1))[0];
+          if (!latest) return null;
+          return (
+            <p className="text-xs text-foam-dim/70 mt-2">
+              Last milestone:{' '}
+              <Link to="/timeline" className="text-amber hover:underline">
+                {latest.title}
+              </Link>
+              , {timeAgo(latest.date)}
+            </p>
+          );
+        })()}
       </section>
 
       {/* Stats row */}

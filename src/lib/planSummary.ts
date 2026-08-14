@@ -1,6 +1,7 @@
-import type { Tank, RosterItem, WaterParams } from '../types';
-import { CATEGORY_LABELS, STATUS_LABELS } from './constants';
-import { todayIso } from './date';
+import type { Tank, RosterItem, WaterParams, LogPhase } from '../types';
+import { CATEGORY_LABELS, STATUS_LABELS, LOG_PHASE_LABELS } from './constants';
+import { todayIso, toIsoDate } from './date';
+import { calendarDurationBetween, formatTankAge, tankLifetimeDuration } from './duration';
 import {
   aggregateWaterParamTarget,
   computeParamStatus,
@@ -313,4 +314,66 @@ export function buildStockingLoadResearchPrompt(tank: Tank): string {
     STOCKING_LOAD_ASK,
   ];
   return sections.join('\n\n');
+}
+
+// A genuinely different question from the two prompts above — those are
+// forward-looking (here's my plan, here's what I'm about to do). This is
+// backward-looking: here's what actually happened, and how it unfolded
+// in practice, not the plan. Needs different data than a roster/targets
+// snapshot: real per-phase pacing and the major-milestone sequence in
+// order, both pulled straight from what the app already tracks — never
+// re-derived or guessed.
+function buildPhaseSegments(tank: Tank): { phase: LogPhase; startDate: string; days: number }[] {
+  const transitions = [...tank.milestones]
+    .filter((m): m is typeof m & { phase: LogPhase } => m.type === 'phase-change' && m.phase !== undefined)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return transitions.map((t, i) => {
+    const startIso = toIsoDate(new Date(t.date));
+    const endIso = i + 1 < transitions.length ? toIsoDate(new Date(transitions[i + 1].date)) : todayIso();
+    const duration = calendarDurationBetween(startIso, endIso);
+    return { phase: t.phase, startDate: startIso, days: duration.totalDays };
+  });
+}
+
+export function buildProgressCheckPrompt(tank: Tank): string {
+  const lifetime = tankLifetimeDuration(tank);
+  const ageLine = lifetime
+    ? `This tank is ${formatTankAge(lifetime)} old.`
+    : "This tank doesn't have a start date set, so I can't give an overall age.";
+
+  const segments = buildPhaseSegments(tank);
+  const phaseLines =
+    segments.length > 0
+      ? segments
+          .map((s, i) => {
+            const isCurrent = i === segments.length - 1;
+            const dayLabel = `${s.days} day${s.days === 1 ? '' : 's'}`;
+            return `- ${LOG_PHASE_LABELS[s.phase]}: ${dayLabel}${isCurrent ? ' (current phase, still ongoing)' : ''}`;
+          })
+          .join('\n')
+      : '(No phase has been tagged on a log entry yet — no pacing data to show.)';
+
+  const majorMilestones = [...tank.milestones]
+    .filter((m) => m.major)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const milestoneLines =
+    majorMilestones.length > 0
+      ? majorMilestones.map((m) => `- ${new Date(m.date).toLocaleDateString()}: ${m.title}`).join('\n')
+      : '(No major milestones recorded yet.)';
+
+  return `I'd like an honest progress check on how this aquarium build has actually unfolded so far — the real timeline of what happened, not the original plan.
+
+${ageLine}
+
+Time spent in each phase reached so far:
+${phaseLines}
+
+Major milestones in order:
+${milestoneLines}
+
+Please give an honest take on the pacing — was any phase suspiciously fast or slow for what it actually was? Is there a pattern in the sequence itself, now that it's visible in hindsight, worth knowing about? A couple things to keep in mind:
+
+- Most of this has already happened and can't be undone. If something looks like it was handled imperfectly, the useful response is a concrete next step to take now, not a critique of a decision that's already in the past.
+- If nothing here actually looks concerning, say so plainly rather than manufacturing something to seem thorough.`;
 }

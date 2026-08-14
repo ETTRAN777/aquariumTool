@@ -36,6 +36,11 @@ export interface RosterItem {
   cost?: number;
   quantity?: number;
   notes?: string;
+  // Floats this item to the top of its own category on the Roster page
+  // (and only its category — a starred equipment item doesn't jump above
+  // unstarred livestock). Purely a personal-priority marker; doesn't
+  // drive any other logic in the app.
+  starred?: boolean;
   // Targets page fields — only meaningful for livestock/plant items, but
   // not type-restricted to those categories since a category could
   // theoretically change after targets were already set.

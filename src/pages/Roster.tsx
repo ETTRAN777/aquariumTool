@@ -16,24 +16,65 @@ export default function Roster() {
 
   if (!activeTank) return null;
 
+  // Starred is always a SECOND-priority sort key, never a first one — it
+  // never overrides what the active sort mode is actually for, only
+  // breaks ties within it. A plain multi-key comparator is safe here in
+  // a way the original implementation wasn't: that version conditioned
+  // the starred comparison on category equality (returning 0 for
+  // cross-category pairs), which isn't a valid total order — non-
+  // transitive comparators are undefined behavior for Array.sort() and
+  // only "worked" by accident when items already happened to be
+  // pre-grouped by category. Every branch below compares by its real
+  // primary key first, falling back to starred only on an actual tie —
+  // that's always a valid total order, so a single sort() per branch is
+  // correct and sufficient; no custom algorithm needed anywhere.
+  const starredTiebreak = (a: RosterItem, b: RosterItem) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0);
+
   let items = activeTank.roster.filter((r) => filter === 'all' || r.category === filter);
   if (sortMode === 'category') {
     const categoryOrder = Object.keys(CATEGORY_LABELS) as RosterItem['category'][];
-    items = [...items].sort(
-      (a, b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category)
-    );
+    items = [...items].sort((a, b) => {
+      const catDiff = categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category);
+      return catDiff !== 0 ? catDiff : starredTiebreak(a, b);
+    });
   } else if (sortMode === 'status') {
     // Established at top, working down to Idea at the bottom — the
-    // opposite of STATUS_ORDER's own ascending-progress order.
-    items = [...items].sort(
-      (a, b) => STATUS_ORDER.indexOf(b.status) - STATUS_ORDER.indexOf(a.status)
-    );
+    // opposite of STATUS_ORDER's own ascending-progress order. Starred
+    // only breaks ties WITHIN the same status — it can't pull a starred
+    // "Arrived" item ahead of an unstarred "Established" one, which
+    // would contradict what this sort is actually for.
+    items = [...items].sort((a, b) => {
+      const statusDiff = STATUS_ORDER.indexOf(b.status) - STATUS_ORDER.indexOf(a.status);
+      return statusDiff !== 0 ? statusDiff : starredTiebreak(a, b);
+    });
+  } else {
+    // Default order: no primary key at all (that's the point of
+    // "default") — starred is the only thing that moves anything,
+    // pulling every starred item to the top of the list regardless of
+    // category. True whether filter is "all" or a single category —
+    // with one category shown, this is trivially the same result as
+    // floating within it; with all shown, it's the only way starring
+    // means anything visible, since nothing else groups categories
+    // together for it to float within.
+    items = [...items].sort(starredTiebreak);
   }
 
   // Items still at "Idea" haven't actually been committed to yet, so they
   // don't count toward either number below — only once something's
   // promoted to Wishlist or further does its cost start counting.
   const budgetedItems = activeTank.roster.filter((r) => r.status !== 'idea');
+
+  // Points back to the roster item's own auto-created "first appearance"
+  // milestone, if one exists (per the recompute rules in lib/milestones.ts
+  // — every distinct item gets exactly one, tied to whichever entry
+  // mentioned it first). Not every item has one — e.g. anything added
+  // before 15c shipped, or before its first log-entry mention — so this
+  // stays a plain lookup, never fabricated.
+  function findFirstAddedMilestone(item: RosterItem) {
+    return activeTank!.milestones.find(
+      (m) => m.type === 'roster-addition' && m.relatedRosterItemIds?.includes(item.id)
+    );
+  }
   // Estimate: every wishlist-or-later item's cost, whether that number is
   // still a guess or the item's already been bought — same total this
   // page has always shown, just given a name now that there's a second
@@ -140,6 +181,16 @@ export default function Roster() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
+                    onClick={() => updateRosterItem({ ...item, starred: !item.starred })}
+                    className={`text-sm transition-colors ${
+                      item.starred ? 'text-amber' : 'text-foam-dim/30 hover:text-foam-dim/60'
+                    }`}
+                    title={item.starred ? 'Unstar' : 'Star — floats to the top of its category'}
+                    aria-label={item.starred ? 'Unstar this item' : 'Star this item'}
+                  >
+                    {item.starred ? '★' : '☆'}
+                  </button>
+                  <button
                     onClick={() => setFilter(item.category)}
                     className="pill py-0.5 px-2 font-mono text-[10px] uppercase tracking-wide text-sand bg-sand/10 hover:bg-sand/20 transition-colors"
                     title={`Filter to ${CATEGORY_LABELS[item.category]}`}
@@ -167,6 +218,14 @@ export default function Roster() {
                 {item.source && (
                   <p className="text-xs text-foam-dim/70 mt-1 font-mono">from {item.source}</p>
                 )}
+                {(() => {
+                  const m = findFirstAddedMilestone(item);
+                  return m ? (
+                    <p className="text-xs text-amber/80 mt-1 font-mono">
+                      {m.major ? '🎉' : '📦'} First added {new Date(m.date).toLocaleDateString()}
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <button
