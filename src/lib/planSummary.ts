@@ -336,6 +336,74 @@ function buildPhaseSegments(tank: Tank): { phase: LogPhase; startDate: string; d
   });
 }
 
+// Grounds the pacing summary above in what actually happened, not just
+// aggregate numbers — an AI reading only phase durations and milestone
+// dates can see THAT Cycling took 56 days, but nothing about WHAT
+// happened during it. Scoped deliberately, not "every log entry ever"
+// (too long) or "nothing" (the original gap): full content for any log
+// entry with AT LEAST ONE linked milestone, major or minor — a minor
+// roster-addition still marks something real, just not spine-of-the-
+// story level. Plus health-event/custom milestones as their own items,
+// since those are manual and might have no linkedLogEntryId at all.
+// Merged into one chronological feed rather than two separate lists, so
+// it reads as "what happened, in order" rather than disconnected pieces.
+function buildGroundedContentSection(tank: Tank): string {
+  const linkedEntryIds = new Set(
+    tank.milestones.filter((m) => m.linkedLogEntryId).map((m) => m.linkedLogEntryId!)
+  );
+
+  const items: { date: string; content: string }[] = [];
+
+  for (const l of tank.logs) {
+    if (!linkedEntryIds.has(l.id)) continue;
+    const moodPart = l.mood ? ` [mood: ${l.mood}]` : '';
+    items.push({
+      date: l.date,
+      content: `${new Date(l.date).toLocaleDateString()} — ${l.title}${moodPart}\n${l.body}`,
+    });
+  }
+
+  for (const m of tank.milestones) {
+    if (m.type !== 'health-event' && m.type !== 'custom') continue;
+    const desc = m.description ? `: ${m.description}` : '';
+    items.push({
+      date: m.date,
+      content: `${new Date(m.date).toLocaleDateString()} — [Milestone] ${m.title}${desc}`,
+    });
+  }
+
+  items.sort((a, b) => a.date.localeCompare(b.date));
+
+  return items.length > 0
+    ? items.map((i) => i.content).join('\n\n')
+    : '(No log entries have a milestone attached yet, and no health/custom events recorded.)';
+}
+
+// Structured, undated companion to the grounded log content below —
+// checklist steps have no completion timestamp anywhere in the schema
+// (just `done: boolean`), so they can't contribute to the pacing
+// question this prompt asks, but they're a clean signal for "what's
+// actually been accomplished" that log-entry text doesn't reliably
+// capture on its own. "Next up" is just the first not-done item in the
+// checklist's own array order — the same order `isOrderValid`/
+// `dependsOn` already keep valid, so it's a real "what's actually next"
+// rather than a guess.
+function buildChecklistProgressSection(tank: Tank): string {
+  const completed = tank.checklist.filter((c) => c.done);
+  const nextUp = tank.checklist.find((c) => !c.done);
+
+  const completedLines =
+    completed.length > 0
+      ? completed.map((c) => `- ${c.label}${c.detail ? ` — ${c.detail}` : ''}`).join('\n')
+      : '(No checklist steps completed yet.)';
+
+  const nextUpLine = nextUp
+    ? `\n\nNext step queued up: ${nextUp.label}${nextUp.detail ? ` — ${nextUp.detail}` : ''}`
+    : '';
+
+  return `${completedLines}${nextUpLine}`;
+}
+
 export function buildProgressCheckPrompt(tank: Tank): string {
   const lifetime = tankLifetimeDuration(tank);
   const ageLine = lifetime
@@ -362,6 +430,9 @@ export function buildProgressCheckPrompt(tank: Tank): string {
       ? majorMilestones.map((m) => `- ${new Date(m.date).toLocaleDateString()}: ${m.title}`).join('\n')
       : '(No major milestones recorded yet.)';
 
+  const checklistProgress = buildChecklistProgressSection(tank);
+  const groundedContent = buildGroundedContentSection(tank);
+
   return `I'd like an honest progress check on how this aquarium build has actually unfolded so far — the real timeline of what happened, not the original plan.
 
 ${ageLine}
@@ -371,6 +442,13 @@ ${phaseLines}
 
 Major milestones in order:
 ${milestoneLines}
+
+Checklist steps completed so far (no timestamps — this is a structured "what's been done" list, not part of the pacing picture above):
+${checklistProgress}
+
+Here's what actually happened, in the entries and events tied to a milestone (not every log entry — just the ones that marked something real):
+
+${groundedContent}
 
 Please give an honest take on the pacing — was any phase suspiciously fast or slow for what it actually was? Is there a pattern in the sequence itself, now that it's visible in hindsight, worth knowing about? A couple things to keep in mind:
 

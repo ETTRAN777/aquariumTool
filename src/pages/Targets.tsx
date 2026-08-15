@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { TARGET_TRAIT_PRESETS } from '../data/targetTraitPresets';
 import { CATEGORY_LABELS } from '../lib/constants';
@@ -18,6 +18,7 @@ import {
   type TargetStatus,
 } from '../lib/targets';
 import { buildStockingLoadResearchPrompt } from '../lib/planSummary';
+import AutoResizeTextarea from '../components/AutoResizeTextarea';
 import type { RosterItem, RosterItemTrait, WaterParams, CustomFieldType, CustomFieldValue } from '../types';
 
 const FRESHWATER_PARAMS: (keyof WaterParams)[] = ['temperature', 'ph', 'gh', 'kh', 'tds'];
@@ -738,37 +739,6 @@ function TraitInput({
     <AutoResizeTextarea
       value={typeof trait.value === 'string' ? trait.value : ''}
       onChange={(v) => onChange(v === '' ? undefined : v)}
-    />
-  );
-}
-
-// Grows to fit its content instead of scrolling/clipping — used for free-text
-// traits like Temperament that can run long. Only affects this expanded-card
-// editor; the collapsed-card pill summary keeps its own separate ellipsis
-// truncation regardless of how tall this gets.
-function AutoResizeTextarea({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
-
-  return (
-    <textarea
-      ref={ref}
-      rows={1}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="field text-xs px-2 py-1 flex-1 resize-none overflow-hidden leading-relaxed"
     />
   );
 }

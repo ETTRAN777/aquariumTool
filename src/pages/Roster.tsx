@@ -3,6 +3,7 @@ import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS, statusMeetsRequirement } from '../lib/constants';
 import type { RosterItem, SourcingStatus } from '../types';
+import AutoResizeTextarea from '../components/AutoResizeTextarea';
 
 type SortMode = 'default' | 'category' | 'status';
 
@@ -420,11 +421,11 @@ function ItemForm({
         onChange={(e) => setCost(e.target.value)}
         className="field"
       />
-      <input
+      <AutoResizeTextarea
         placeholder="Detail (optional)"
         value={detail}
-        onChange={(e) => setDetail(e.target.value)}
-        className="field sm:col-span-2"
+        onChange={setDetail}
+        className="field sm:col-span-2 resize-none overflow-hidden leading-relaxed"
       />
       <input
         placeholder="Source (optional)"
