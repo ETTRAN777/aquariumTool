@@ -150,14 +150,34 @@ export function currentPhase(tank: Tank): LogPhase | undefined {
 // would just be echoing the same number back. Reused as-is for both the
 // milestone-description day-count prefix and Timeline's planned "Your
 // Tank is X old" line — one formatter, not two.
+// Always formats a POSITIVE magnitude, regardless of whether the
+// underlying duration is past or future — deliberately sign-agnostic.
+// calendarDurationBetween can return a negative duration on purpose (a
+// future Tank.startDate — a genuinely real case, e.g. a far-off concept
+// tank planned but not yet started), and the original version of this
+// function didn't account for that: `d.totalDays < 7` is true for ANY
+// negative number, so it always fell into the single-day collapse
+// branch and printed the raw negative value verbatim — "Day -90" for a
+// tank starting 90 days from now, regardless of how far out the date
+// actually was. Fixed by taking the magnitude of every field up front.
+// This function has no opinion on past vs. future — it's the CALLER's
+// job to notice `d.totalDays < 0` and choose different surrounding
+// wording ("starts in X" vs. "is X old"), since that's a real semantic
+// difference, not just a formatting one.
 export function formatTankAge(d: CalendarDuration): string {
-  if (d.totalDays < 7) {
-    return `Day ${d.totalDays}`;
+  const years = Math.abs(d.years);
+  const months = Math.abs(d.months);
+  const weeks = Math.abs(d.weeks);
+  const days = Math.abs(d.days);
+  const totalDays = Math.abs(d.totalDays);
+
+  if (totalDays < 7) {
+    return `Day ${totalDays}`;
   }
   const parts: string[] = [];
-  if (d.years > 0) parts.push(`Year ${d.years}`);
-  if (d.years > 0 || d.months > 0) parts.push(`Month ${d.months}`);
-  parts.push(`Week ${d.weeks}`);
-  parts.push(`Day ${d.days}`);
-  return `${parts.join(' ')} (${d.totalDays} Days)`;
+  if (years > 0) parts.push(`Year ${years}`);
+  if (years > 0 || months > 0) parts.push(`Month ${months}`);
+  parts.push(`Week ${weeks}`);
+  parts.push(`Day ${days}`);
+  return `${parts.join(' ')} (${totalDays} Days)`;
 }

@@ -246,10 +246,17 @@ export default function Timeline() {
         <h2 className="font-display text-2xl font-semibold">Timeline</h2>
         <p className="text-sm text-foam-dim mt-1">
           {lifetime ? (
-            <>
-              Your tank is{' '}
-              <span className="text-amber font-medium">{formatTankAge(lifetime)}</span> old.
-            </>
+            lifetime.totalDays < 0 ? (
+              <>
+                This tank hasn't started yet — planned to begin in{' '}
+                <span className="text-amber font-medium">{formatTankAge(lifetime)}</span>.
+              </>
+            ) : (
+              <>
+                Your tank is{' '}
+                <span className="text-amber font-medium">{formatTankAge(lifetime)}</span> old.
+              </>
+            )
           ) : (
             <>
               Set a start date for this tank to see how old it is —{' '}
