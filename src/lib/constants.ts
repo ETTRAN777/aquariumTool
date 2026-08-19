@@ -26,6 +26,22 @@ export const CATEGORY_LABELS: Record<RosterItem['category'], string> = {
   equipment: 'Equipment',
 };
 
+export const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as RosterItem['category'][];
+
+// Groups roster items by category, preserving each category's internal
+// order and CATEGORY_ORDER's canonical category order. Shared by every
+// roster picker that groups by category — RosterLinkPicker's <optgroup>
+// select, Timeline's manual-milestone pill picker, and (per Roadmap item
+// 1) the future Story Mode chip picker — so the grouping logic itself
+// only lives in one place.
+export function groupRosterByCategory(roster: RosterItem[]): Partial<Record<RosterItem['category'], RosterItem[]>> {
+  const groups: Partial<Record<RosterItem['category'], RosterItem[]>> = {};
+  for (const item of roster) {
+    (groups[item.category] ??= []).push(item);
+  }
+  return groups;
+}
+
 export function statusMeetsRequirement(current: SourcingStatus, required: SourcingStatus): boolean {
   return STATUS_ORDER.indexOf(current) >= STATUS_ORDER.indexOf(required);
 }

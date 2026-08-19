@@ -5,7 +5,7 @@ import { resizeImageToBase64 } from '../lib/storage';
 import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS, STATUS_LABELS } from '../lib/constants';
 import ConfirmModal from '../components/ConfirmModal';
 import Toast from '../components/Toast';
-import RosterLinkPicker from '../components/RosterLinkPicker';
+import RosterHighlightPicker from '../components/RosterHighlightPicker';
 
 export default function Log() {
   const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry } = useData();
@@ -83,6 +83,11 @@ export default function Log() {
                     {entry.phase && (
                       <span className="ml-2 text-amber">🧭 {LOG_PHASE_LABELS[entry.phase]}</span>
                     )}
+                    {entry.highlightedRosterItemIds && entry.highlightedRosterItemIds.length > 0 && (
+                      <span className="ml-2 text-amber">
+                        ✨ {entry.highlightedRosterItemIds.length}
+                      </span>
+                    )}
                     {entry.completedScheduleTaskIds && entry.completedScheduleTaskIds.length > 0 && (
                       <span className="ml-2 text-moss-light">
                         🔗 {entry.completedScheduleTaskIds.length} done
@@ -135,6 +140,24 @@ export default function Log() {
                           </span>
                         );
                       })}
+                    </div>
+                  )}
+                  {entry.highlightedRosterItemIds && entry.highlightedRosterItemIds.length > 0 && (
+                    <div>
+                      <p className="field-label mb-1.5">Highlighted this entry</p>
+                      <div className="flex flex-wrap gap-2">
+                        {entry.highlightedRosterItemIds.map((itemId) => {
+                          const item = activeTank.roster.find((r) => r.id === itemId);
+                          return (
+                            <span
+                              key={itemId}
+                              className="pill py-1 px-2 font-mono text-xs bg-amber/15 border border-amber/25 text-amber"
+                            >
+                              ✨ {item?.name ?? '(removed item)'}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                   {entry.additions && entry.additions.length > 0 && (
@@ -281,6 +304,9 @@ function EntryForm({
   const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood);
   const [phase, setPhase] = useState<LogEntry['phase']>(initial?.phase);
   const [additions, setAdditions] = useState<RosterLink[]>(initial?.additions ?? []);
+  const [highlightedRosterItemIds, setHighlightedRosterItemIds] = useState<string[]>(
+    initial?.highlightedRosterItemIds ?? []
+  );
   const [params, setParams] = useState<WaterParams>(initial?.params ?? {});
   const [customValues, setCustomValues] = useState<Record<string, CustomFieldValue>>(
     initial?.customValues ?? {}
@@ -331,6 +357,7 @@ function EntryForm({
       mood,
       phase,
       additions: additions.length ? additions : undefined,
+      highlightedRosterItemIds: highlightedRosterItemIds.length ? highlightedRosterItemIds : undefined,
       params,
       customValues: Object.keys(customValues).length ? customValues : undefined,
       photoUrls: photos.length ? photos : undefined,
@@ -411,12 +438,17 @@ function EntryForm({
       </div>
 
       <div>
-        <p className="field-label">Roster items added this entry (optional)</p>
-        <RosterLinkPicker
+        <p className="field-label">Roster items (optional)</p>
+        <p className="text-[11px] text-foam-dim/60 -mt-1 mb-2">
+          Add an item, then use ✨ to flag it as notable and/or 📦 to mark a status it reached —
+          either, both, or neither, independently.
+        </p>
+        <RosterHighlightPicker
           roster={roster}
           links={additions}
-          onChange={setAdditions}
-          label="Roster items that reached this status as of this entry"
+          onChangeLinks={setAdditions}
+          highlightedIds={highlightedRosterItemIds}
+          onChangeHighlighted={setHighlightedRosterItemIds}
         />
       </div>
 

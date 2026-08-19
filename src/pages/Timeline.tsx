@@ -5,7 +5,7 @@ import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso } from '../lib/date';
 import type { Milestone, MilestoneType, LogEntry, LogPhase, RosterItem } from '../types';
-import { LOG_PHASE_LABELS, LOG_PHASE_ORDER, MOOD_LABELS } from '../lib/constants';
+import { LOG_PHASE_LABELS, LOG_PHASE_ORDER, MOOD_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, groupRosterByCategory } from '../lib/constants';
 import { tankLifetimeDuration, formatTankAge } from '../lib/duration';
 import { buildFallbackDescription } from '../lib/milestones';
 import { buildProgressCheckPrompt } from '../lib/planSummary';
@@ -105,7 +105,7 @@ export default function Timeline() {
   const titleRefs = useRef(new Map<string, HTMLHeadingElement>());
   const [cardWidth, setCardWidth] = useState(200);
 
-  const majorMilestonesForSizing = activeTank?.milestones.filter((m) => m.major) ?? [];
+  const majorMilestonesForSizing = activeTank?.milestones?.filter((m) => m.major) ?? [];
   useLayoutEffect(() => {
     let max = 0;
     titleRefs.current.forEach((el) => {
@@ -517,6 +517,7 @@ function MilestoneForm({
   const [phase, setPhase] = useState<LogPhase | undefined>(initial?.phase);
   const [relatedIds, setRelatedIds] = useState<string[]>(initial?.relatedRosterItemIds ?? []);
   const [major, setMajor] = useState(initial?.major ?? false);
+  const groupedRoster = groupRosterByCategory(roster);
 
   function toggleRelated(id: string) {
     setRelatedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -601,20 +602,29 @@ function MilestoneForm({
       {roster.length > 0 && (
         <div>
           <p className="field-label mb-1">Related roster items (optional)</p>
-          <div className="flex flex-wrap gap-1.5">
-            {roster.map((r) => (
-              <button
-                type="button"
-                key={r.id}
-                onClick={() => toggleRelated(r.id)}
-                className={`pill text-xs py-1 px-2 ${
-                  relatedIds.includes(r.id)
-                    ? 'bg-sand/25 text-sand border border-sand/40'
-                    : 'bg-deepwater-2 text-foam-dim border border-moss/30'
-                }`}
-              >
-                {r.name}
-              </button>
+          <div className="space-y-2">
+            {CATEGORY_ORDER.filter((cat) => groupedRoster[cat]?.length).map((cat) => (
+              <div key={cat}>
+                <p className="text-[10px] text-foam-dim font-mono uppercase tracking-wide mb-1">
+                  {CATEGORY_LABELS[cat]}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {groupedRoster[cat]!.map((r) => (
+                    <button
+                      type="button"
+                      key={r.id}
+                      onClick={() => toggleRelated(r.id)}
+                      className={`pill text-xs py-1 px-2 ${
+                        relatedIds.includes(r.id)
+                          ? 'bg-sand/25 text-sand border border-sand/40'
+                          : 'bg-deepwater-2 text-foam-dim border border-moss/30'
+                      }`}
+                    >
+                      {r.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

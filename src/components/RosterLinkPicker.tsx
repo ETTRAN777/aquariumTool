@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import type { RosterItem, RosterLink, SourcingStatus } from '../types';
-import { STATUS_ORDER, STATUS_LABELS } from '../lib/constants';
+import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, groupRosterByCategory } from '../lib/constants';
 
-// Shared by Checklist.tsx (rosterLinks — a forward-looking gate: "don't
-// mark this step done until this item reaches this status") and Log.tsx
-// (LogEntry.additions — a retrospective record: "this item reached this
-// status as of this entry"). Same underlying shape and interaction
-// mechanics either way, so the picker itself is one component — only the
-// instruction text differs, via the `label` prop, since the two uses mean
-// genuinely different things despite sharing a type.
+// Used by Checklist.tsx (rosterLinks — a forward-looking gate: "don't
+// mark this step done until this item reaches this status"). Log.tsx
+// used to share this component for its `additions` field too, but now
+// uses RosterHighlightPicker instead — a consolidated chip picker that
+// adds the independent ✨ Highlight toggle Story Mode needs (2b). This
+// component itself is unchanged; it's just down to one consumer now.
 export default function RosterLinkPicker({
   roster,
   links,
@@ -22,6 +21,7 @@ export default function RosterLinkPicker({
 }) {
   const [pickItemId, setPickItemId] = useState(roster[0]?.id ?? '');
   const [pickStatus, setPickStatus] = useState<SourcingStatus>('arrived');
+  const groupedRoster = groupRosterByCategory(roster);
 
   function addLink() {
     if (!pickItemId) return;
@@ -66,10 +66,14 @@ export default function RosterLinkPicker({
             onChange={(e) => setPickItemId(e.target.value)}
             className="field flex-1"
           >
-            {roster.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
+            {CATEGORY_ORDER.filter((cat) => groupedRoster[cat]?.length).map((cat) => (
+              <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
+                {groupedRoster[cat]!.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <select

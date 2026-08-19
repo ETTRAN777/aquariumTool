@@ -116,6 +116,28 @@ body {
     outline: none;
   }
 
+  /* `color-scheme: dark` above already gets browsers to render the open
+     popup in a dark native theme rather than stark white-on-black — but
+     that's the browser's own generic dark gray, not the app's actual
+     palette. `<option>`/`<optgroup>` are two of the few native-select
+     parts CSS genuinely can reach (unlike the popup's background/hover/
+     selection-highlight chrome, which stays out of CSS's reach in every
+     browser) — coloring them here gets the category headers and item
+     text on-brand without touching anything else about the native
+     control. Chrome/Firefox/Edge apply this reliably; Safari is known to
+     ignore optgroup color styling and falls back to its own default bold
+     text — a graceful degradation, not a break. */
+  .field optgroup {
+    color: var(--color-amber);
+    font-style: normal;
+    background: var(--color-deepwater-2);
+  }
+
+  .field option {
+    color: var(--color-foam);
+    background: var(--color-deepwater-2);
+  }
+
   .field-label {
     display: block;
     font-family: var(--font-mono);

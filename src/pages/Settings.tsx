@@ -18,7 +18,7 @@ export default function Settings() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const [name, setName] = useState(activeTank?.name ?? '');
-  const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons.toString() ?? '');
+  const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons?.toString() ?? '');
   const [dimensions, setDimensions] = useState(activeTank?.dimensions ?? '');
   const [lengthIn, setLengthIn] = useState(activeTank?.lengthIn?.toString() ?? '');
   const [widthIn, setWidthIn] = useState(activeTank?.widthIn?.toString() ?? '');

@@ -191,6 +191,18 @@ export interface LogEntry {
   // as ChecklistTask.rosterLinks (reused deliberately, not a new type),
   // e.g. tagging the day founding shrimp actually arrived.
   additions?: RosterLink[];
+  // Roster items flagged as narratively significant in this entry —
+  // deliberately independent of `additions` above. A status change is an
+  // objective fact (this item reached this status); a highlight is a
+  // subjective one (this item mattered enough to remember), and the two
+  // don't have to move together — an item can be highlighted with no
+  // status change at all, or reach a status without being highlighted.
+  // 2b's chip picker sets this via its own ✨ toggle, only auto-checked
+  // as a suggested default when a real status is also picked. Feeds 2d's
+  // roster-highlight aggregation for the Story Mode slide deck — nothing
+  // downstream has real data to work with until entries start setting
+  // this.
+  highlightedRosterItemIds?: string[];
   // ScheduleTask ids completed on this same calendar day, auto-attached when
   // a matching log entry already exists — see completeScheduleTask in
   // DataContext. Never causes a log entry to be created; only annotates one
