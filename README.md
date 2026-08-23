@@ -9,52 +9,6 @@ tracks is fully customizable.
 
 **[Use it →](https://ETTRAN777.github.io/aquariumTool/)**
 
-## Technical highlights
-
-- **Static-hosting-aware routing** — uses `HashRouter` instead of
-  `BrowserRouter` so client-side routes never hit GitHub Pages' server,
-  sidestepping the classic SPA-on-static-hosting 404-on-refresh problem.
-- **Custom global state, no external library** — a Context-based store with
-  immutable update patterns (spread-based, no direct mutation) synced to
-  `localStorage` on every change, including a backwards-compatible migration
-  layer that upgrades old-schema backups on load without data loss.
-- **Graph algorithms applied to real UI** — the build checklist supports
-  arbitrary step dependencies, enforced with DFS-based cycle detection
-  (rejecting a dependency that would create a circular wait) and a
-  topological-ordering constraint validated on every reorder.
-- **Diagnosed a CSS Cascade Layers spec issue** — tracked down a silent
-  Tailwind v4 style-override bug to unlayered custom CSS beating layered
-  utility classes regardless of source order, and fixed it by adopting
-  Tailwind's own `@layer components` convention.
-- **Root-caused two separate charting library bugs** through systematic
-  isolation testing rather than trial-and-error — one from passing a
-  pre-instantiated React element instead of a component reference to
-  Recharts' `Tooltip`, another from an axis keyed on a non-unique display
-  string causing hover lookups to collide.
-- **Custom Recharts wheel-zoom for the Parameters charts**, cursor-centered
-  and shared across all charts at once — building it surfaced a real lesson
-  in not trusting stale documentation: an initial fix for off-center
-  zooming was based on a search result that happened to hit Recharts'
-  v2.x source, silently doing nothing against the v3.x actually installed.
-  Reading the real shipped source directly found the actual cause — the
-  grid background element it depended on is conditionally rendered behind
-  a `fill` prop this app never sets — and pointed to the axis line as a
-  reliable anchor instead, confirmed against the real DOM rather than
-  assumed a second time.
-- **Structural diffing for smart data import** — deduplicates imported tanks
-  by comparing serialized content (excluding volatile IDs) against existing
-  data, distinguishing an exact duplicate from a same-named-but-modified
-  tank and offering the right action for each.
-- **AI-crawlability solved properly, not just assumed** — a client-rendered
-  SPA is invisible to a plain HTTP fetch, so the site ships a genuine
-  `noscript` fallback, structured JSON-LD, and a static `/docs.txt`/
-  `llms.txt` pair for assistants that read the page without executing JS.
-- **Diagnosed an undocumented Drive API CORS gap** — Google's upload
-  endpoint doesn't return a CORS preflight response allowing `PATCH` from a
-  browser origin, confirmed against other developers hitting the identical
-  error. Sidestepped it with delete-then-recreate instead of update-in-place
-  — same end result, using only methods with reliable CORS support.
-
 ## What it does
 
 - **Multi-tank** — track as many tanks as you want, switch between them from
@@ -209,6 +163,72 @@ for no analytical benefit — a tank with even a handful of photographed
 logs can turn a quick structural review into a file that eats a meaningful
 chunk of a usage window before any actual work happens. The image-free
 export is still a fully valid, re-importable backup on its own.
+
+## Technical highlights
+
+- **Static-hosting-aware routing** — uses `HashRouter` instead of
+  `BrowserRouter` so client-side routes never hit GitHub Pages' server,
+  sidestepping the classic SPA-on-static-hosting 404-on-refresh problem.
+- **Custom global state, no external library** — a Context-based store with
+  immutable update patterns (spread-based, no direct mutation) synced to
+  `localStorage` on every change, including a backwards-compatible migration
+  layer that upgrades old-schema backups on load without data loss.
+- **Graph algorithms applied to real UI** — the build checklist supports
+  arbitrary step dependencies, enforced with DFS-based cycle detection
+  (rejecting a dependency that would create a circular wait) and a
+  topological-ordering constraint validated on every reorder.
+- **Custom Recharts wheel-zoom for the Parameters charts**, cursor-centered
+  and shared across all charts at once.
+- **Structural diffing for smart data import** — deduplicates imported tanks
+  by comparing serialized content (excluding volatile IDs) against existing
+  data, distinguishing an exact duplicate from a same-named-but-modified
+  tank and offering the right action for each.
+- **AI-crawlability solved properly, not just assumed** — a client-rendered
+  SPA is invisible to a plain HTTP fetch, so the site ships a genuine
+  `noscript` fallback, structured JSON-LD, and a static `/docs.txt`/
+  `llms.txt` pair for assistants that read the page without executing JS.
+- **Defensive import validation against malformed and AI-generated JSON** —
+  every field the UI constrains to a fixed set of options (roster category,
+  sourcing status, mood, milestone type, and others) is validated on import
+  and defaulted with a specific, user-facing warning rather than silently
+  accepted or left to crash somewhere downstream; structural references
+  (ids, a milestone's link back to a log entry) are checked too, so a
+  dangling reference degrades gracefully instead of corrupting later logic.
+
+## Notable bug fixes
+
+Debugging write-ups for a few bugs worth telling the story of, kept
+separate from the highlights above since these are diagnoses more than
+decisions.
+
+- **CSS Cascade Layers spec issue** — tracked down a silent Tailwind v4
+  style-override bug to unlayered custom CSS beating layered utility
+  classes regardless of source order, and fixed it by adopting Tailwind's
+  own `@layer components` convention.
+- **Two separate charting library bugs**, found through systematic
+  isolation testing rather than trial-and-error — one from passing a
+  pre-instantiated React element instead of a component reference to
+  Recharts' `Tooltip`, another from an axis keyed on a non-unique display
+  string causing hover lookups to collide.
+- **Off-center wheel-zoom on the Parameters charts** — a lesson in not
+  trusting stale documentation. An initial fix was based on a search result
+  that happened to hit Recharts' v2.x source, silently doing nothing
+  against the v3.x actually installed. Reading the real shipped source
+  directly found the actual cause — the grid background element it
+  depended on is conditionally rendered behind a `fill` prop this app never
+  sets — and pointed to the axis line as a reliable anchor instead,
+  confirmed against the real DOM rather than assumed a second time.
+- **Undocumented Google Drive API CORS gap** — the upload endpoint doesn't
+  return a CORS preflight response allowing `PATCH` from a browser origin,
+  confirmed against other developers hitting the identical error.
+  Sidestepped it with delete-then-recreate instead of update-in-place —
+  same end result, using only methods with reliable CORS support.
+- **An AI-generated import missing `sizeGallons` entirely crashed the
+  site** — traced to a `useState` initializer calling `.toString()` on a
+  value that was `undefined` rather than merely absent, since TypeScript's
+  `number` type only holds for code that actually goes through the type
+  system. Led to the defensive import-validation pass noted above, rather
+  than patching just that one call site.
 
 ## License
 
