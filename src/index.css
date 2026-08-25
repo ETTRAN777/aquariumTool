@@ -133,6 +133,28 @@ body {
     background: var(--color-deepwater-2);
   }
 
+  /* Story Mode slide entrance — headline and subtext fade/slide in with a
+     slight stagger (headline first, subtext a beat later) via inline
+     animationDelay at the call site, not a second class. `both` keeps
+     the pre-animation state (opacity 0) applied before the animation
+     starts, so there's no flash of full-opacity content on mount.
+     Punched up after first real testing — the original 8px/500ms
+     version read as barely-there; a bigger rise and a touch of scale
+     makes each reveal feel more like a real moment. */
+  @keyframes story-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(24px) scale(0.94);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .story-fade-in {
+    animation: story-fade-in 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
   .field option {
     color: var(--color-foam);
     background: var(--color-deepwater-2);

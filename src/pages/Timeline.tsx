@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useLayoutEffect, lazy, Suspense } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
@@ -8,6 +8,21 @@ import type { Milestone, MilestoneType, LogEntry, LogPhase, RosterItem } from '.
 import { LOG_PHASE_LABELS, LOG_PHASE_ORDER, MOOD_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, groupRosterByCategory } from '../lib/constants';
 import { tankLifetimeDuration, formatTankAge } from '../lib/duration';
 import { buildFallbackDescription } from '../lib/milestones';
+
+// Lazy-loaded for the same reason Charts is in App.tsx — a full-screen
+// feature most sessions won't open, no reason to ship its chunk with
+// every Timeline visit.
+const StoryMode = lazy(() => import('../components/StoryMode'));
+
+// Same reasoning as App.tsx's ChartsLoadingFallback — only ever hit on a
+// cold cache, typically well under a second on a real connection.
+function StoryModeLoadingFallback() {
+  return (
+    <div className="fixed inset-0 z-50 bg-deepwater flex items-center justify-center text-sm text-foam-dim">
+      Loading Story Mode…
+    </div>
+  );
+}
 import { buildProgressCheckPrompt } from '../lib/planSummary';
 
 const MILESTONE_TYPE_LABELS: Record<MilestoneType, string> = {
@@ -92,6 +107,7 @@ export default function Timeline() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [copiedProgressCheck, setCopiedProgressCheck] = useState(false);
+  const [storyModeOpen, setStoryModeOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
   const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
@@ -271,6 +287,12 @@ export default function Timeline() {
           className="mt-2 font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
         >
           {copiedProgressCheck ? '✓ Copied to clipboard' : '📈 Copy progress check prompt'}
+        </button>
+        <button
+          onClick={() => setStoryModeOpen(true)}
+          className="mt-2 ml-3 font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          ✨ Story Mode
         </button>
       </div>
 
@@ -495,6 +517,11 @@ export default function Timeline() {
           })}
         </div>
       </div>
+      {storyModeOpen && (
+        <Suspense fallback={<StoryModeLoadingFallback />}>
+          <StoryMode tank={activeTank} onClose={() => setStoryModeOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

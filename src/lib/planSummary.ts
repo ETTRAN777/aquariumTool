@@ -323,7 +323,10 @@ export function buildStockingLoadResearchPrompt(tank: Tank): string {
 // snapshot: real per-phase pacing and the major-milestone sequence in
 // order, both pulled straight from what the app already tracks — never
 // re-derived or guessed.
-function buildPhaseSegments(tank: Tank): { phase: LogPhase; startDate: string; days: number }[] {
+// Exported — reused by lib/storyMode.ts's phase-pacing superlative (2d),
+// same "don't re-derive what already exists" reasoning as everywhere
+// else in this file.
+export function buildPhaseSegments(tank: Tank): { phase: LogPhase; startDate: string; days: number }[] {
   const transitions = [...tank.milestones]
     .filter((m): m is typeof m & { phase: LogPhase } => m.type === 'phase-change' && m.phase !== undefined)
     .sort((a, b) => a.date.localeCompare(b.date));
