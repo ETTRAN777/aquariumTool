@@ -220,11 +220,53 @@ export function computePhasePacingSuperlative(tank: Tank): PhasePacingSuperlativ
 
 // --- Milestone reel ---
 
-// Chronological, uncapped — how many fit on screen at once is a
-// rendering/pagination decision for 2e, not something this function
-// should pre-decide by silently dropping real milestones.
-export function computeMilestoneReel(tank: Tank): Milestone[] {
-  return tank.milestones.filter((m) => m.major).sort((a, b) => a.date.localeCompare(b.date));
+// A single reel "stop" — either one milestone on its own, or a group of
+// roster-addition milestones that all trace back to the same log entry.
+// Grouping matters for real, not cosmetic, reasons: without it, a single
+// big "purchases made" entry that produced several roster-addition
+// milestones at once would show up as several near-identical reel
+// stops, each displaying the same underlying entry — reads as a bug
+// (the same slide repeating) rather than several real distinct
+// moments, because they aren't several distinct moments; they're one.
+export type MilestoneReelStop =
+  | { kind: 'single'; date: string; milestone: Milestone }
+  | { kind: 'group'; date: string; linkedLogEntryId: string; milestones: Milestone[] };
+
+// Same grouping rule Timeline.tsx already uses for its own feed — only
+// roster-addition milestones sharing a linkedLogEntryId get bundled;
+// phase-change/health-event/custom milestones always stay their own
+// stop, even if they happen to share an entry with a group (a phase
+// change and a shopping trip can genuinely be the same real-world
+// moment without needing to be visually merged the way several roster
+// additions from one entry do). Reused rather than re-derived so the
+// two don't drift into disagreeing about what counts as "the same
+// moment."
+export function computeMilestoneReel(tank: Tank): MilestoneReelStop[] {
+  const majors = tank.milestones.filter((m) => m.major);
+
+  const rosterGroups = new Map<string, Milestone[]>();
+  const singles: Milestone[] = [];
+  for (const m of majors) {
+    if (m.type === 'roster-addition' && m.linkedLogEntryId) {
+      const arr = rosterGroups.get(m.linkedLogEntryId) ?? [];
+      arr.push(m);
+      rosterGroups.set(m.linkedLogEntryId, arr);
+    } else {
+      singles.push(m);
+    }
+  }
+
+  const stops: MilestoneReelStop[] = [
+    ...singles.map((m) => ({ kind: 'single' as const, date: m.date, milestone: m })),
+    ...[...rosterGroups.entries()].map(([linkedLogEntryId, milestones]) => ({
+      kind: 'group' as const,
+      date: milestones[0].date,
+      linkedLogEntryId,
+      milestones,
+    })),
+  ];
+
+  return stops.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // --- Mood vibe — the one place real inference happens ---

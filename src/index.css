@@ -155,6 +155,241 @@ body {
     animation: story-fade-in 650ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
+  /* Mood-color backgrounds for Story Mode — reuses colors that already
+     carry this exact meaning elsewhere in the app rather than inventing
+     a new palette: coral already marks concern (shallow-flag borders,
+     destructive actions), amber already marks positive emphasis, moss
+     is the app's own "healthy/established" green, sand sits neutrally
+     between them. Applied only to the two slides where a color is
+     actually justified by real data (Mood Vibe, Health Events) — not a
+     blanket treatment across the whole deck, since most slides have no
+     mood of their own to draw from. Subtle by design (12-22% mix into
+     the base deepwater) — a wash, not a repaint.
+
+     Every variant below — including `default`, deliberately expressed
+     as a gradient rather than a plain color — shares the exact same
+     gradient function, position, and stop percentages (0%/65%), only
+     the color at the first stop differs. This isn't cosmetic
+     consistency: CSS can only smoothly interpolate a `background`
+     transition between two gradients with matching structure. A plain
+     solid color and a radial-gradient() are structurally incompatible
+     value types — the transition can't blend them, so the browser
+     snaps between them instead, which on a position:fixed overlay
+     briefly let the real page underneath show through. That was a real,
+     reported bug, not a hypothetical one — found on exactly the
+     transitions into/out of the two slides that actually change this
+     class (Mood Vibe, Health Events), which is the tell that pointed
+     here rather than at the React remount bug fixed just before this. */
+  .story-bg-thriving {
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-amber) 18%, var(--color-deepwater)) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-stable {
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-moss) 22%, var(--color-deepwater)) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-watching {
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-sand) 16%, var(--color-deepwater)) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-concerned {
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-coral) 16%, var(--color-deepwater)) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-subdued {
+    background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-coral) 10%, var(--color-deepwater)) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-default {
+    /* Two separate reasons this is its own class rather than the
+       bg-deepwater Tailwind utility: (1) gradient-vs-solid-color
+       interpolation, explained above, and (2) combining a Tailwind
+       utility with an @layer components class for the same property on
+       the same element is the exact Cascade Layers conflict this
+       project's README already documents — utilities always win over
+       @layer components regardless of source order, which would make
+       every other story-bg-* class here silently never apply. Keeping
+       the whole background state machine inside one class family avoids
+       both problems at once. */
+    background: radial-gradient(ellipse at 50% 30%, var(--color-deepwater) 0%, var(--color-deepwater) 65%);
+  }
+  .story-bg-transition {
+    transition: background 700ms ease;
+  }
+
+  /* Ambient rising bubbles — on-theme for an aquarium app rather than
+     generic confetti. Negative animation-delay on each bubble (set
+     inline per-instance) starts it mid-cycle immediately on mount,
+     rather than every bubble starting from the bottom in sync, which
+     would look mechanical instead of ambient. */
+  @keyframes story-bubble-rise {
+    0% { transform: translateY(0) scale(1); opacity: 0; }
+    10% { opacity: 0.5; }
+    85% { opacity: 0.25; }
+    100% { transform: translateY(-100vh) scale(1.15); opacity: 0; }
+  }
+  .story-bubble {
+    position: absolute;
+    bottom: -20px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--color-foam) 25%, transparent);
+    animation: story-bubble-rise linear infinite;
+    pointer-events: none;
+  }
+
+  /* Wave-motif transition, redesigned after feedback — the first
+     version was a thin decorative accent, not the literal "rising tide
+     reveals the new slide" effect actually wanted, and used Waterline's
+     default `preserveAspectRatio="none"`, which stretches the wave's
+     natural 1200:28 proportions to fill whatever width it's given — on
+     a narrow mobile slide that's a severe horizontal compression, which
+     is exactly why the wave read as "just a thin barely visible line."
+
+     This version is a genuine wipe: a solid black rectangle covers the
+     slide from `height: 100%` down to `height: 0%`, anchored to the
+     top, so as it shrinks, its BOTTOM edge — where the wave sits — rises
+     up the screen, revealing the new slide's real content underneath as
+     it passes, the same direction a rising tide would cover ground
+     climbing upward. The wave itself is pinned to that shrinking
+     rectangle's bottom edge via flexbox, so it always marks the current
+     boundary between "not yet revealed" (black) and "revealed."
+
+     .story-tide-waterline uses `preserveAspectRatio="xMidYMid slice"`
+     (see Waterline.tsx) with an explicit height instead of `none` — this
+     scales the wave to COVER the given box at its true, undistorted
+     proportions and crops the overflow, rather than squishing the whole
+     1200-unit pattern into a narrow width. Real wave detail, cropped to
+     fit, not distorted to fit.
+
+     Stacking: rendered between AmbientBubbles and the actual slide
+     content in the JSX (see StoryMode.tsx), and deliberately given no
+     explicit z-index — plain DOM order already produces the correct
+     layering (bubbles first/behind, wipe next, slide content last/on
+     top), so any bubble currently inside the still-covered region is
+     genuinely hidden by the opaque black, while the slide content's own
+     FadeIn entrance always renders above the wipe and is never obscured
+     by it. */
+  @keyframes story-tide-rise {
+    0% { height: 100%; }
+    /* A slight early hesitation — water doesn't leap the instant it
+       starts moving. */
+    10% { height: 97%; }
+    22% { height: 98%; }
+    /* The real rise, then a small overshoot past its resting point and
+       settle back — more like a wave actually arriving than a
+       mechanically smooth wipe. */
+    72% { height: 4%; }
+    86% { height: 7%; }
+    100% { height: 0%; }
+  }
+  .story-tide-wipe {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .story-tide-black {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    animation: story-tide-rise 900ms ease-in-out both;
+  }
+
+  /* Real wave morphing, not a shape translating — animates the SVG
+     path's `d` directly through several in-between curve shapes, so the
+     wave actually undulates as it rises instead of a static crest
+     sliding as a rigid unit. This is what was missing before: the
+     height-shrink mechanism was already fine, but the *edge* itself
+     never deformed, which is why the whole thing read as "a moving box"
+     regardless of timing. Real, standards-based CSS (the `d` property,
+     not the SVG attribute) — current Chrome/Firefox/Safari all support
+     it; older browsers just keep the static base shape from
+     Waterline.tsx's own `d` attribute as a graceful fallback, not a
+     broken animation.
+
+     Three distinct variants — swell (wide, gentle, 2 curve segments),
+     chop (faster, sharper, 4 segments), surge (asymmetric, one peak
+     that travels across rather than staying centered) — selected per
+     slide in StoryMode.tsx, not per-transition-random, so a given slide
+     has a recognizable character each time you reach it, layered on top
+     of the existing per-transition duration randomness for "no two
+     transitions feel identical" underneath that per-slide identity.
+     Curve values are a first pass, hand-tuned without a live preview —
+     worth eyeballing and adjusting once actually seen, same caveat as
+     other purely-visual choices this session. */
+  @keyframes story-wave-swell {
+    0%   { d: path("M0,14 C150,26 350,2 600,14 C850,26 1050,2 1200,14 L1200,28 L0,28 Z"); }
+    50%  { d: path("M0,9 C150,23 350,-4 600,9 C850,23 1050,-4 1200,9 L1200,28 L0,28 Z"); }
+    100% { d: path("M0,17 C150,25 350,9 600,17 C850,25 1050,9 1200,17 L1200,28 L0,28 Z"); }
+  }
+  @keyframes story-wave-chop {
+    0%   { d: path("M0,14 C75,22 150,6 300,14 C450,22 525,6 600,14 C750,22 825,6 900,14 C1050,22 1125,6 1200,14 L1200,28 L0,28 Z"); }
+    50%  { d: path("M0,11 C75,25 150,-1 300,11 C450,25 525,-1 600,11 C750,25 825,-1 900,11 C1050,25 1125,-1 1200,11 L1200,28 L0,28 Z"); }
+    100% { d: path("M0,16 C75,20 150,10 300,16 C450,20 525,10 600,16 C750,20 825,10 900,16 C1050,20 1125,10 1200,16 L1200,28 L0,28 Z"); }
+  }
+  @keyframes story-wave-surge {
+    0%   { d: path("M0,20 C200,4 400,24 600,14 C800,4 1000,24 1200,14 L1200,28 L0,28 Z"); }
+    50%  { d: path("M0,14 C200,24 400,4 600,20 C800,24 1000,4 1200,14 L1200,28 L0,28 Z"); }
+    100% { d: path("M0,14 C200,4 400,24 600,10 C800,4 1000,26 1200,20 L1200,28 L0,28 Z"); }
+  }
+  .story-tide-waterline {
+    width: 100%;
+    height: 56px;
+    display: block;
+    flex-shrink: 0;
+  }
+  .story-tide-waterline path {
+    fill: var(--color-amber);
+  }
+  .story-wave-variant-swell path { animation: story-wave-swell 2.6s ease-in-out infinite; }
+  .story-wave-variant-chop path { animation: story-wave-chop 1.7s ease-in-out infinite; }
+  .story-wave-variant-surge path { animation: story-wave-surge 3.1s ease-in-out infinite; }
+
+  /* Second, fainter wave layer slightly behind and phase-offset from the
+     main one — real water rarely has just one clean ripple; a second
+     layer moving at a different rate gives genuine depth/parallax
+     rather than a single flat crest. Negative animation-delay starts it
+     mid-cycle immediately rather than in sync with the primary layer. */
+  .story-tide-waterline-back {
+    width: 100%;
+    height: 40px;
+    display: block;
+    flex-shrink: 0;
+    margin-bottom: -18px;
+    opacity: 0.35;
+  }
+  .story-tide-waterline-back path {
+    fill: var(--color-moss-light);
+  }
+  .story-wave-variant-swell .story-tide-waterline-back path { animation: story-wave-swell 3.4s ease-in-out infinite -1.2s; }
+  .story-wave-variant-chop .story-tide-waterline-back path { animation: story-wave-chop 2.1s ease-in-out infinite -0.6s; }
+  .story-wave-variant-surge .story-tide-waterline-back path { animation: story-wave-surge 3.9s ease-in-out infinite -1.8s; }
+
+  /* Same fix as .story-tide-waterline, smaller — the milestone reel's
+     own content divider (between a stop's factual header and its story
+     snippet/photo) was using Waterline's default preserveAspectRatio
+     ("none") inside an even narrower 180px box than the tide-wipe,
+     meaning it was squished even more severely. Modest height befitting
+     a subtle content divider rather than a major transition moment. */
+  .story-divider-waterline {
+    width: 100%;
+    height: 20px;
+    display: block;
+  }
+  .story-divider-waterline path {
+    /* moss, not deepwater-2 (Layout.tsx's original section-divider
+       fill) — deepwater-2 is nearly the same tone as the deepwater
+       background this sits against, and combined with the wrapper's
+       own opacity-60 would render as close to invisible rather than a
+       real divider. moss is already this app's established color for
+       visible-but-calm dividers/borders elsewhere (border-moss/25,
+       border-moss/30 on cards throughout), a better fit here than
+       reusing a tone that only works against Layout's different
+       surrounding context. */
+    fill: var(--color-moss);
+  }
+
   .field option {
     color: var(--color-foam);
     background: var(--color-deepwater-2);
