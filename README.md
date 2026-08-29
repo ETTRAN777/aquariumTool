@@ -194,6 +194,15 @@ export is still a fully valid, re-importable backup on its own.
   accepted or left to crash somewhere downstream; structural references
   (ids, a milestone's link back to a log entry) are checked too, so a
   dangling reference degrades gracefully instead of corrupting later logic.
+- **Cross-origin data access via the Storage Access API**, for an
+  embeddable startpage widget that reads live `localStorage` from inside a
+  third-party `<iframe>` — the same privacy protection that blocks
+  cross-site tracking by default also blocks a first-party embed from
+  reading its own data, so the widget requests access explicitly
+  (`document.requestStorageAccess({ localStorage: true })`) rather than
+  assuming it's available. Chrome-only was the accepted bar going in;
+  Safari's lack of a silent grant path is a known platform limitation, not
+  a bug to chase.
 
 ## Notable bug fixes
 

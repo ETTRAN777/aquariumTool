@@ -11,7 +11,7 @@ import Timeline from './pages/Timeline';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import CreateTank from './pages/CreateTank';
-import JsonDocs from './pages/JsonDocs';
+import Widget from './pages/Widget';
 import Analytics from './components/Analytics';
 
 // recharts (plus its d3 sub-dependencies) is the single largest thing in
@@ -24,6 +24,14 @@ import Analytics from './components/Analytics';
 // actually navigates to /charts.
 const Charts = lazy(() => import('./pages/Charts'));
 
+// Same reasoning as Charts above — not for bundle weight this time
+// (JsonDocs itself is small), but because it pushed the main chunk over
+// Vite's 500kB warning threshold once the new Features Guide tab's
+// content was added directly to it. /docs fits the same "rarely
+// visited, self-contained, not needed for the main app flow" profile
+// Charts and Story Mode already established this pattern for.
+const JsonDocs = lazy(() => import('./pages/JsonDocs'));
+
 // Minimal, unobtrusive fallback shown only while the Charts chunk itself
 // downloads — typically well under a second on a real connection, and
 // only ever hit on a cold cache (repeat visits get it from the browser
@@ -35,6 +43,15 @@ function ChartsLoadingFallback() {
   );
 }
 
+// Same fallback shape as Charts', reused directly rather than a
+// second near-identical component — the message is the only thing that
+// needs to differ.
+function DocsLoadingFallback() {
+  return (
+    <div className="card p-6 text-sm text-foam-dim">Loading docs…</div>
+  );
+}
+
 function NewTankRoute() {
   const navigate = useNavigate();
   return <CreateTank onDone={() => navigate('/')} />;
@@ -42,14 +59,26 @@ function NewTankRoute() {
 
 // Gatekeeps the main nav shell: no tank yet means no nav, no Dashboard,
 // nothing but the onboarding flow. Once a tank exists, normal routing
-// resumes. /docs is deliberately outside that gate — it's meant to be
-// reachable from the onboarding screen itself, before a tank exists.
+// resumes. /docs and /widget are deliberately outside that gate — /docs
+// needs to be reachable from the onboarding screen itself, before a
+// tank exists; /widget can legitimately load with no data yet too
+// (before a third-party iframe's storage access is granted — see
+// Widget.tsx), and must never redirect into onboarding just because
+// activeTank happens to be undefined at that moment.
 function AppShell() {
   const { activeTank } = useData();
 
   return (
     <Routes>
-      <Route path="/docs" element={<JsonDocs />} />
+      <Route
+        path="/docs"
+        element={
+          <Suspense fallback={<DocsLoadingFallback />}>
+            <JsonDocs />
+          </Suspense>
+        }
+      />
+      <Route path="/widget" element={<Widget />} />
       {!activeTank ? (
         <Route path="*" element={<CreateTank />} />
       ) : (

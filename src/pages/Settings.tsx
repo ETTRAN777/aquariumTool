@@ -16,6 +16,18 @@ export default function Settings() {
   const { activeTank, updateTank, setCustomFields, deleteTank } = useData();
   const navigate = useNavigate();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [copiedWidgetSnippet, setCopiedWidgetSnippet] = useState(false);
+
+  function copyWidgetSnippet() {
+    const snippet = '<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:170px" loading="lazy"></iframe>';
+    navigator.clipboard
+      .writeText(snippet)
+      .then(() => {
+        setCopiedWidgetSnippet(true);
+        setTimeout(() => setCopiedWidgetSnippet(false), 2000);
+      })
+      .catch(() => {});
+  }
 
   const [name, setName] = useState(activeTank?.name ?? '');
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons?.toString() ?? '');
@@ -326,6 +338,18 @@ export default function Settings() {
             Add field
           </button>
         </form>
+      </div>
+
+      <div className="card p-5 space-y-3">
+        <p className="field-label">Tidemark Widget</p>
+        <p className="text-xs text-foam-dim">
+          Embed this tank's name, age, most relevant schedule task, and last log entry on another page — Live data, refreshed on load, no separate export needed. Chrome is
+          the only browser this is expected to work in reliably; Safari either doesn't support the storage
+          access this needs yet or requires tapping to unlock it on every single visit.
+        </p>
+        <button onClick={copyWidgetSnippet} className="btn btn-secondary text-xs">
+          {copiedWidgetSnippet ? '✓ Copied to clipboard' : '📋 Copy embed snippet'}
+        </button>
       </div>
 
       <div className="card border-coral/30 p-5 space-y-3">

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
+import { daysUntil, formatDue, TONE_CLASSES } from '../lib/schedule';
 import type { ScheduleTask } from '../types';
 import Toast from '../components/Toast';
 
@@ -20,30 +21,6 @@ const RECURRENCE_PRESETS: { label: string; days: number | null }[] = [
 ];
 
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-function daysUntil(dateStr: string): number {
-  const today = parseIsoDate(todayIso());
-  const due = parseIsoDate(dateStr);
-  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-function formatDue(dateStr: string): { label: string; tone: 'overdue' | 'today' | 'soon' | 'later' } {
-  const diff = daysUntil(dateStr);
-  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, tone: 'overdue' };
-  if (diff === 0) return { label: 'Due today', tone: 'today' };
-  if (diff <= 3) return { label: `In ${diff}d`, tone: 'soon' };
-  return {
-    label: parseIsoDate(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-    tone: 'later',
-  };
-}
-
-const TONE_CLASSES: Record<string, string> = {
-  overdue: 'bg-coral/20 text-coral',
-  today: 'bg-amber/20 text-amber',
-  soon: 'bg-sand/15 text-sand',
-  later: 'bg-moss/15 text-foam-dim',
-};
 
 const DOT_CLASSES: Record<string, string> = {
   overdue: 'bg-coral',

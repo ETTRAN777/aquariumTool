@@ -92,6 +92,24 @@ body {
    broke width overrides like sm:w-40 on a `.field` select. */
 
 @layer components {
+  /* Shared styling for /widget's non-content states (tap-to-unlock,
+     unsupported browser, no tank yet) — small, dark, self-contained
+     since this route has no Layout chrome to inherit page-level
+     background/spacing from. */
+  .widget-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 300px;
+    min-height: 100px;
+    border-radius: 0.75rem;
+    background: var(--color-deepwater);
+    color: color-mix(in srgb, var(--color-foam) 70%, transparent);
+    font-size: 0.75rem;
+    text-align: center;
+    text-decoration: none;
+  }
+
   .field {
     width: 100%;
     background: var(--color-deepwater-2);
