@@ -2,7 +2,19 @@ import { useEffect, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { tankLifetimeDuration } from '../lib/duration';
 import { pickMostRelevantTask, formatDue, daysUntil, TONE_CLASSES } from '../lib/schedule';
+import { parseBackupJson } from '../lib/storage';
+import type { Tank } from '../types';
 import Waterline from '../components/Waterline';
+
+// Must match storage.ts's own (unexported) STORAGE_KEY exactly.
+// Duplicated here rather than exported from storage.ts and imported —
+// this is the one legitimate place outside storage.ts that needs to
+// read localStorage through a channel other than the normal
+// DataProvider path at all (see the handle explanation below), and
+// exporting a raw storage key for one caller felt like a bigger surface
+// change than just keeping the two in sync with a comment pointing at
+// each other.
+const STORAGE_KEY = 'tank-tracker:data:v1';
 
 // A minimal, chrome-less route meant to be embedded via <iframe> on an
 // external page (a personal startpage, etc.) — deliberately outside
@@ -20,25 +32,39 @@ import Waterline from '../components/Waterline';
 // widget from reading real data the way the main app does when visited
 // directly. This requests explicit access via
 // document.requestStorageAccess({ localStorage: true }), the real,
-// standards-based mechanism for exactly this case (see the Parking
-// Lot's "Embeddable/shareable tank widget" entry for the full
-// research). Chrome-only is the accepted bar for v1 — Safari either
-// doesn't support the localStorage-specific extension yet, or requires
-// a real user interaction on every single visit with no silent path at
-// all, a known, accepted limitation, not a bug to chase here.
+// standards-based mechanism for exactly this case. Chrome-only is the
+// accepted bar for v1 — Safari either doesn't support the
+// localStorage-specific extension yet, or requires a real user
+// interaction on every single visit with no silent path at all, a
+// known, accepted limitation, not a bug to chase here.
 //
-// Per MDN's own guidance, a successful grant needs a page reload to
-// actually take effect: DataProvider (in App.tsx) reads localStorage
-// synchronously on its very first render, before any async grant here
-// could possibly resolve — so even a silently-granted return visit
-// still needs one reload cycle for DataProvider's next initial read to
-// pick up real data, not just the frame's storage access technically
-// being active going forward.
+// Real bug found testing the actual live embed, fixed properly rather
+// than patched: requestStorageAccess({ localStorage: true }) resolves
+// with a StorageAccessHandle object — access is only ever available
+// through handle.localStorage, a dedicated Storage object, never
+// through the page's own global `localStorage` binding, reload or not.
+// An earlier version discarded this handle entirely and just reloaded
+// the page, assuming a reload would make the global localStorage become
+// unpartitioned — that assumption is correct for the BASE, cookie-only
+// version of this API, which really does work that way, but not for
+// this newer, structurally different localStorage-specific extension.
+// No reload needed or useful here at all; the handle is immediately
+// usable in the very same load where it was granted. That earlier
+// version silently rendered nothing forever on a repeat grant within
+// one browser session — a symptom of chasing the wrong mechanism, not
+// something a smaller patch would have caught.
 export default function Widget() {
   const inIframe = typeof window !== 'undefined' && window.self !== window.top;
   const [status, setStatus] = useState<'checking' | 'need-tap' | 'granted' | 'unsupported' | 'denied'>(
     inIframe ? 'checking' : 'granted'
   );
+  // Tank data read via the handle specifically — undefined means "not
+  // applicable, fall back to the normal DataProvider/useData() path"
+  // (the direct-visit, non-iframe case, where the global localStorage
+  // genuinely is the real one, no partitioning involved at all). Set to
+  // a real Tank or null once a grant resolves and the handle's own
+  // storage has actually been read.
+  const [handleTank, setHandleTank] = useState<Tank | null | undefined>(undefined);
 
   useEffect(() => {
     if (!inIframe) return;
@@ -54,13 +80,17 @@ export default function Widget() {
     // which is the expected, accepted path for it rather than a failure.
     (document as any)
       .requestStorageAccess({ localStorage: true })
-      .then(() => proceedAfterGrant(setStatus), () => setStatus('need-tap'));
+      .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
+        setStatus('need-tap')
+      );
   }, [inIframe]);
 
   function handleTap() {
     (document as any)
       .requestStorageAccess({ localStorage: true })
-      .then(() => proceedAfterGrant(setStatus), () => setStatus('denied'));
+      .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
+        setStatus('denied')
+      );
   }
 
   if (status === 'checking') return null;
@@ -87,32 +117,43 @@ export default function Widget() {
           Open Tidemark to view
         </a>
       ) : (
-        <WidgetContent />
+        <WidgetContent overrideTank={inIframe ? handleTank : undefined} />
       )}
     </div>
   );
 }
 
-// Reload happens at most once per browser session — the real bug this
-// replaced was treating "don't reload again" and "there's nothing left
-// to do" as the same thing. They're not: skipping the reload on a
-// repeat successful grant just means THIS load's access is already
-// active (the reload already did its job on an earlier load this
-// session), so the right move is to proceed straight to rendering, not
-// leave the caller with nothing further to call at all — which is
-// exactly what silently produced the permanently-blank widget this was
-// fixed in response to seeing live.
-function proceedAfterGrant(setStatus: (s: 'granted') => void) {
-  if (sessionStorage.getItem('tidemark-widget-reloaded')) {
-    setStatus('granted');
-    return;
+function readFromHandle(
+  handle: { localStorage: Storage },
+  setHandleTank: (t: Tank | null) => void,
+  setStatus: (s: 'granted') => void
+) {
+  try {
+    const raw = handle.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      // Reuses the exact same parse+validate path a real backup import
+      // goes through — not a separate, looser read of this data just
+      // because it's coming from the same origin's own storage rather
+      // than a file someone picked. Malformed or unexpected shapes here
+      // fall through to the catch below the same way a bad import file
+      // would, rather than crashing the widget.
+      const { data } = parseBackupJson(raw);
+      setHandleTank(data.tanks.find((t) => t.id === data.activeTankId) ?? null);
+    } else {
+      setHandleTank(null);
+    }
+  } catch {
+    setHandleTank(null);
   }
-  sessionStorage.setItem('tidemark-widget-reloaded', '1');
-  window.location.reload();
+  setStatus('granted');
 }
 
-function WidgetContent() {
-  const { activeTank } = useData();
+function WidgetContent({ overrideTank }: { overrideTank?: Tank | null }) {
+  const { activeTank: contextTank } = useData();
+  // undefined specifically means "not applicable here, use the normal
+  // context path" — distinct from null, which means "applicable, and a
+  // real read via the handle genuinely found no tank."
+  const activeTank = overrideTank !== undefined ? overrideTank : contextTank;
 
   if (!activeTank) {
     return <div className="widget-fallback">No tank yet</div>;
