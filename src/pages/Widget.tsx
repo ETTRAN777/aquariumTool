@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { tankLifetimeDuration } from '../lib/duration';
-import { pickMostRelevantTask, formatDue, TONE_CLASSES } from '../lib/schedule';
+import { pickMostRelevantTask, formatDue, daysUntil, TONE_CLASSES } from '../lib/schedule';
 import Waterline from '../components/Waterline';
 
 // A minimal, chrome-less route meant to be embedded via <iframe> on an
@@ -65,28 +65,32 @@ export default function Widget() {
 
   if (status === 'checking') return null;
 
-  if (status === 'need-tap') {
-    return (
-      <button onClick={handleTap} className="widget-fallback">
-        Tap to load tank widget
-      </button>
-    );
-  }
-
-  if (status === 'unsupported' || status === 'denied') {
-    return (
-      <a
-        href="https://ettran777.github.io/aquariumTool/"
-        target="_blank"
-        rel="noreferrer"
-        className="widget-fallback"
-      >
-        Open Tidemark to view
-      </a>
-    );
-  }
-
-  return <WidgetContent />;
+  // One shared wrapper, not duplicated per branch — makes the widget
+  // look intentional (centered) whether it's visited directly in a full
+  // tab (where html/body's background-propagation quirk would otherwise
+  // paint the whole viewport dark behind a small top-left card) or
+  // properly embedded in a tightly-sized <iframe>, where this has no
+  // visible effect at all since the frame IS the card's size already.
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      {status === 'need-tap' ? (
+        <button onClick={handleTap} className="widget-fallback">
+          Tap to load tank widget
+        </button>
+      ) : status === 'unsupported' || status === 'denied' ? (
+        <a
+          href="https://ettran777.github.io/aquariumTool/"
+          target="_blank"
+          rel="noreferrer"
+          className="widget-fallback"
+        >
+          Open Tidemark to view
+        </a>
+      ) : (
+        <WidgetContent />
+      )}
+    </div>
+  );
 }
 
 // One reload per successful grant, guarded so a browser that somehow
@@ -109,6 +113,18 @@ function WidgetContent() {
   const lifetime = tankLifetimeDuration(activeTank);
   const task = pickMostRelevantTask(activeTank.schedule);
   const due = task ? formatDue(task.dueDate) : undefined;
+  // formatDue's overdue/today/soon labels already say how far away
+  // something is ("3d overdue", "In 2d"). Its "later" label doesn't —
+  // just a bare month/day with no year and no relative sense of
+  // distance, which is exactly what caused real confusion earlier with
+  // this same tank's actual data (a task genuinely due over a year out
+  // read as "already passed" at a glance). Appended here, specific to
+  // the widget, rather than changed in formatDue itself — Schedule.tsx's
+  // calendar view already gives a "later" date real context (you're
+  // looking at the month it's in), so it doesn't have the same ambiguity
+  // a small, context-free glance card does.
+  const dueLabel =
+    task && due && due.tone === 'later' ? `${due.label} (in ${daysUntil(task.dueDate)}d)` : due?.label;
   const lastLog = activeTank.logs.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
 
   return (
@@ -120,7 +136,7 @@ function WidgetContent() {
       {task && due && (
         <div className={`rounded-lg px-3 py-2.5 mb-2.5 ${TONE_CLASSES[due.tone]}`}>
           <div className="text-[13px] font-medium text-foam">{task.label}</div>
-          <div className="text-xs opacity-80">{due.label}</div>
+          <div className="text-xs opacity-80">{dueLabel}</div>
         </div>
       )}
       {lastLog && (

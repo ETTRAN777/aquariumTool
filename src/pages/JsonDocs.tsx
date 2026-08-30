@@ -2,6 +2,17 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { JSON_FORMAT_DOCS } from '../data/apiDocs';
 import Toast from '../components/Toast';
+import CodeBlock from '../components/CodeBlock';
+import { splitFencedCode, splitTables, type ProseSegment } from '../lib/docParsing';
+
+// Computed once at module load, not per-render or even per-component-
+// instance — JSON_FORMAT_DOCS is a static constant, so there's no
+// reason to re-parse it on every mount. Verified behaviorally against
+// the real content before wiring this in: fence-splitting round-trips
+// to the exact original string (zero data loss), and all 7 of the
+// doc's real tables parse with correct column counts, including one
+// that uses markdown's \| escape for a literal pipe inside a cell.
+const AI_QUICKSTART_SEGMENTS = splitFencedCode(JSON_FORMAT_DOCS);
 
 // Two tabs, deliberately different in kind, not just topic — "AI
 // Quickstart" is written FOR an AI assistant and meant to be copied
@@ -71,10 +82,14 @@ export default function JsonDocs() {
               </p>
             </div>
 
-            <div className="card p-5">
-              <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foam-dim overflow-x-auto">
-                {JSON_FORMAT_DOCS}
-              </pre>
+            <div className="card p-5 space-y-4">
+              {AI_QUICKSTART_SEGMENTS.map((segment, i) =>
+                segment.type === 'code' ? (
+                  <CodeBlock key={i} language={segment.language} code={segment.content} />
+                ) : (
+                  <ProseWithTables key={i} content={segment.content} />
+                )
+              )}
             </div>
           </>
         ) : (
@@ -83,6 +98,64 @@ export default function JsonDocs() {
       </main>
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+    </div>
+  );
+}
+
+// Only carves tables out of prose — everything else (headers, bold
+// text, bullet lists) still renders exactly as it always has, plain
+// preformatted text. Full markdown rendering is a bigger, different
+// undertaking than what tables specifically needed.
+function ProseWithTables({ content }: { content: string }) {
+  const segments = splitTables(content);
+  return (
+    <>
+      {segments.map((segment, i) =>
+        segment.type === 'table' ? (
+          <MarkdownTable key={i} segment={segment} />
+        ) : (
+          segment.content.trim() && (
+            <pre
+              key={i}
+              className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foam-dim overflow-x-auto"
+            >
+              {segment.content}
+            </pre>
+          )
+        )
+      )}
+    </>
+  );
+}
+
+function MarkdownTable({ segment }: { segment: Extract<ProseSegment, { type: 'table' }> }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr className="border-b border-moss/30">
+            {segment.headers.map((h, i) => (
+              <th
+                key={i}
+                className="text-left font-mono uppercase tracking-wide text-sand px-2 py-1.5 whitespace-nowrap"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {segment.rows.map((row, i) => (
+            <tr key={i} className="border-b border-moss/10">
+              {row.map((cell, j) => (
+                <td key={j} className="align-top px-2 py-1.5 text-foam-dim">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -149,19 +222,25 @@ function FeaturesGuide() {
         progress check from an AI, not just a recap of the original plan.
       </FeatureCard>
 
-      <FeatureCard
-        icon="📋"
-        title="Startpage widget"
-        location="Settings"
-        to="/settings"
-      >
-        Embeds this tank's name, age, most relevant schedule task, and last log entry on another
-        page you control, live and refreshed on load. Chrome is the browser this is expected to work
-        in reliably; Safari has real, accepted limitations around the storage access this needs.
+      <FeatureCard icon="📋" title="Tidemark Widget">
+        <p className="mb-3">
+          Embeds this tank's name, age, most relevant schedule task, and last log entry on another
+          page you control, live and refreshed on load. Chrome is the browser this is expected to
+          work in reliably; Safari has real, accepted limitations around the storage access this
+          needs.
+        </p>
+        <CodeBlock language="html" code={WIDGET_EMBED_SNIPPET} />
       </FeatureCard>
     </div>
   );
 }
+
+// Static — doesn't depend on which tank happens to be active while
+// viewing this doc. Widget.tsx reads whatever tank is active in the
+// browser the embed is actually viewed from, not one baked into this
+// snippet, so there's nothing tank-specific to parameterize here.
+const WIDGET_EMBED_SNIPPET =
+  '<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:170px" loading="lazy"></iframe>';
 
 function FeatureCard({
   icon,
@@ -172,8 +251,8 @@ function FeatureCard({
 }: {
   icon: string;
   title: string;
-  location: string;
-  to: string;
+  location?: string;
+  to?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -182,11 +261,13 @@ function FeatureCard({
         <p className="font-display text-lg font-semibold">
           {icon} {title}
         </p>
-        <Link to={to} className="text-xs font-mono text-sand hover:text-amber whitespace-nowrap">
-          {location} →
-        </Link>
+        {location && to && (
+          <Link to={to} className="text-xs font-mono text-sand hover:text-amber whitespace-nowrap">
+            {location} →
+          </Link>
+        )}
       </div>
-      <p className="text-sm text-foam-dim leading-relaxed">{children}</p>
+      <div className="text-sm text-foam-dim leading-relaxed">{children}</div>
     </div>
   );
 }
