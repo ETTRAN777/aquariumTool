@@ -239,8 +239,9 @@ function FeaturesGuide() {
 // viewing this doc. Widget.tsx reads whatever tank is active in the
 // browser the embed is actually viewed from, not one baked into this
 // snippet, so there's nothing tank-specific to parameterize here.
+
 const WIDGET_EMBED_SNIPPET =
-  '<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:170px" loading="lazy"></iframe>';
+  '<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:220px;overflow:hidden" loading="lazy"></iframe>';
 
 function FeatureCard({
   icon,
