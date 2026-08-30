@@ -54,13 +54,13 @@ export default function Widget() {
     // which is the expected, accepted path for it rather than a failure.
     (document as any)
       .requestStorageAccess({ localStorage: true })
-      .then(reloadOnce, () => setStatus('need-tap'));
+      .then(() => proceedAfterGrant(setStatus), () => setStatus('need-tap'));
   }, [inIframe]);
 
   function handleTap() {
     (document as any)
       .requestStorageAccess({ localStorage: true })
-      .then(reloadOnce, () => setStatus('denied'));
+      .then(() => proceedAfterGrant(setStatus), () => setStatus('denied'));
   }
 
   if (status === 'checking') return null;
@@ -93,12 +93,20 @@ export default function Widget() {
   );
 }
 
-// One reload per successful grant, guarded so a browser that somehow
-// keeps re-resolving this on every render (shouldn't happen, but this
-// is genuinely bleeding-edge platform behavior worth not trusting
-// blindly) can't loop forever.
-function reloadOnce() {
-  if (sessionStorage.getItem('tidemark-widget-reloaded')) return;
+// Reload happens at most once per browser session — the real bug this
+// replaced was treating "don't reload again" and "there's nothing left
+// to do" as the same thing. They're not: skipping the reload on a
+// repeat successful grant just means THIS load's access is already
+// active (the reload already did its job on an earlier load this
+// session), so the right move is to proceed straight to rendering, not
+// leave the caller with nothing further to call at all — which is
+// exactly what silently produced the permanently-blank widget this was
+// fixed in response to seeing live.
+function proceedAfterGrant(setStatus: (s: 'granted') => void) {
+  if (sessionStorage.getItem('tidemark-widget-reloaded')) {
+    setStatus('granted');
+    return;
+  }
   sessionStorage.setItem('tidemark-widget-reloaded', '1');
   window.location.reload();
 }
