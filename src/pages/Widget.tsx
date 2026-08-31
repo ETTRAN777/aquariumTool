@@ -54,148 +54,158 @@ const STORAGE_KEY = 'tank-tracker:data:v1';
 // one browser session — a symptom of chasing the wrong mechanism, not
 // something a smaller patch would have caught.
 export default function Widget() {
-  const inIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const [status, setStatus] = useState<'checking' | 'need-tap' | 'granted' | 'unsupported' | 'denied'>(
-    inIframe ? 'checking' : 'granted'
-  );
-  // Tank data read via the handle specifically — undefined means "not
-  // applicable, fall back to the normal DataProvider/useData() path"
-  // (the direct-visit, non-iframe case, where the global localStorage
-  // genuinely is the real one, no partitioning involved at all). Set to
-  // a real Tank or null once a grant resolves and the handle's own
-  // storage has actually been read.
-  const [handleTank, setHandleTank] = useState<Tank | null | undefined>(undefined);
+    const inIframe = typeof window !== 'undefined' && window.self !== window.top;
+    const [status, setStatus] = useState<'checking' | 'need-tap' | 'granted' | 'unsupported' | 'denied'>(
+        inIframe ? 'checking' : 'granted'
+    );
+    // Tank data read via the handle specifically — undefined means "not
+    // applicable, fall back to the normal DataProvider/useData() path"
+    // (the direct-visit, non-iframe case, where the global localStorage
+    // genuinely is the real one, no partitioning involved at all). Set to
+    // a real Tank or null once a grant resolves and the handle's own
+    // storage has actually been read.
+    const [handleTank, setHandleTank] = useState<Tank | null | undefined>(undefined);
 
-  useEffect(() => {
-    if (!inIframe) return;
-    const hasApi = typeof (document as any).requestStorageAccess === 'function';
-    if (!hasApi) {
-      setStatus('unsupported');
-      return;
+    useEffect(() => {
+        if (!inIframe) return;
+        const hasApi = typeof (document as any).requestStorageAccess === 'function';
+        if (!hasApi) {
+            setStatus('unsupported');
+            return;
+        }
+        // Try silently first — on browsers/visits where access was already
+        // granted, this resolves without a prompt or a click at all. Safari
+        // never resolves this without a real interaction, so it predictably
+        // rejects here and falls through to the tap-to-unlock state below,
+        // which is the expected, accepted path for it rather than a failure.
+        (document as any)
+            .requestStorageAccess({ localStorage: true })
+            .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
+                setStatus('need-tap')
+            );
+    }, [inIframe]);
+
+    function handleTap() {
+        (document as any)
+            .requestStorageAccess({ localStorage: true })
+            .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
+                setStatus('denied')
+            );
     }
-    // Try silently first — on browsers/visits where access was already
-    // granted, this resolves without a prompt or a click at all. Safari
-    // never resolves this without a real interaction, so it predictably
-    // rejects here and falls through to the tap-to-unlock state below,
-    // which is the expected, accepted path for it rather than a failure.
-    (document as any)
-      .requestStorageAccess({ localStorage: true })
-      .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
-        setStatus('need-tap')
-      );
-  }, [inIframe]);
 
-  function handleTap() {
-    (document as any)
-      .requestStorageAccess({ localStorage: true })
-      .then((handle: { localStorage: Storage }) => readFromHandle(handle, setHandleTank, setStatus), () =>
-        setStatus('denied')
-      );
-  }
+    if (status === 'checking') return null;
 
-  if (status === 'checking') return null;
-
-  // One shared wrapper, not duplicated per branch — makes the widget
-  // look intentional (centered) whether it's visited directly in a full
-  // tab (where html/body's background-propagation quirk would otherwise
-  // paint the whole viewport dark behind a small top-left card) or
-  // properly embedded in a tightly-sized <iframe>, where this has no
-  // visible effect at all since the frame IS the card's size already.
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      {status === 'need-tap' ? (
-        <button onClick={handleTap} className="widget-fallback">
-          Tap to load tank widget
-        </button>
-      ) : status === 'unsupported' || status === 'denied' ? (
-        <a
-          href="https://ettran777.github.io/aquariumTool/"
-          target="_blank"
-          rel="noreferrer"
-          className="widget-fallback"
-        >
-          Open Tidemark to view
-        </a>
-      ) : (
-        <WidgetContent overrideTank={inIframe ? handleTank : undefined} />
-      )}
-    </div>
-  );
+    // One shared wrapper, not duplicated per branch — makes the widget
+    // look intentional (centered) whether it's visited directly in a full
+    // tab (where html/body's background-propagation quirk would otherwise
+    // paint the whole viewport dark behind a small top-left card) or
+    // properly embedded in a tightly-sized <iframe>, where this has no
+    // visible effect at all since the frame IS the card's size already.
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            {status === 'need-tap' ? (
+                <button onClick={handleTap} className="widget-fallback">
+                    Tap to load tank widget
+                </button>
+            ) : status === 'unsupported' || status === 'denied' ? (
+                <a
+                    href="https://ettran777.github.io/aquariumTool/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="widget-fallback"
+                >
+                    Open Tidemark to view
+                </a>
+            ) : (
+                <WidgetContent overrideTank={inIframe ? handleTank : undefined} />
+            )}
+        </div>
+    );
 }
 
 function readFromHandle(
-  handle: { localStorage: Storage },
-  setHandleTank: (t: Tank | null) => void,
-  setStatus: (s: 'granted') => void
+    handle: { localStorage: Storage },
+    setHandleTank: (t: Tank | null) => void,
+    setStatus: (s: 'granted') => void
 ) {
-  try {
-    const raw = handle.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      // Reuses the exact same parse+validate path a real backup import
-      // goes through — not a separate, looser read of this data just
-      // because it's coming from the same origin's own storage rather
-      // than a file someone picked. Malformed or unexpected shapes here
-      // fall through to the catch below the same way a bad import file
-      // would, rather than crashing the widget.
-      const { data } = parseBackupJson(raw);
-      setHandleTank(data.tanks.find((t) => t.id === data.activeTankId) ?? null);
-    } else {
-      setHandleTank(null);
+    try {
+        const raw = handle.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+            // Reuses the exact same parse+validate path a real backup import
+            // goes through — not a separate, looser read of this data just
+            // because it's coming from the same origin's own storage rather
+            // than a file someone picked. Malformed or unexpected shapes here
+            // fall through to the catch below the same way a bad import file
+            // would, rather than crashing the widget.
+            const { data } = parseBackupJson(raw);
+            setHandleTank(data.tanks.find((t) => t.id === data.activeTankId) ?? null);
+        } else {
+            setHandleTank(null);
+        }
+    } catch {
+        setHandleTank(null);
     }
-  } catch {
-    setHandleTank(null);
-  }
-  setStatus('granted');
+    setStatus('granted');
 }
 
 function WidgetContent({ overrideTank }: { overrideTank?: Tank | null }) {
-  const { activeTank: contextTank } = useData();
-  // undefined specifically means "not applicable here, use the normal
-  // context path" — distinct from null, which means "applicable, and a
-  // real read via the handle genuinely found no tank."
-  const activeTank = overrideTank !== undefined ? overrideTank : contextTank;
+    const { activeTank: contextTank } = useData();
+    // undefined specifically means "not applicable here, use the normal
+    // context path" — distinct from null, which means "applicable, and a
+    // real read via the handle genuinely found no tank."
+    const activeTank = overrideTank !== undefined ? overrideTank : contextTank;
 
-  if (!activeTank) {
-    return <div className="widget-fallback">No tank yet</div>;
-  }
+    if (!activeTank) {
+        return <div className="widget-fallback">No tank yet</div>;
+    }
 
-  const lifetime = tankLifetimeDuration(activeTank);
-  const task = pickMostRelevantTask(activeTank.schedule);
-  const due = task ? formatDue(task.dueDate) : undefined;
-  // formatDue's overdue/today/soon labels already say how far away
-  // something is ("3d overdue", "In 2d"). Its "later" label doesn't —
-  // just a bare month/day with no year and no relative sense of
-  // distance, which is exactly what caused real confusion earlier with
-  // this same tank's actual data (a task genuinely due over a year out
-  // read as "already passed" at a glance). Appended here, specific to
-  // the widget, rather than changed in formatDue itself — Schedule.tsx's
-  // calendar view already gives a "later" date real context (you're
-  // looking at the month it's in), so it doesn't have the same ambiguity
-  // a small, context-free glance card does.
-  const dueLabel =
-    task && due && due.tone === 'later' ? `${due.label} (in ${daysUntil(task.dueDate)}d)` : due?.label;
-  const lastLog = activeTank.logs.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
+    const lifetime = tankLifetimeDuration(activeTank);
+    const task = pickMostRelevantTask(activeTank.schedule);
+    const due = task ? formatDue(task.dueDate) : undefined;
+    // formatDue's overdue/today/soon labels already say how far away
+    // something is ("3d overdue", "In 2d"). Its "later" label doesn't —
+    // just a bare month/day with no year and no relative sense of
+    // distance, which is exactly what caused real confusion earlier with
+    // this same tank's actual data (a task genuinely due over a year out
+    // read as "already passed" at a glance). Appended here, specific to
+    // the widget, rather than changed in formatDue itself — Schedule.tsx's
+    // calendar view already gives a "later" date real context (you're
+    // looking at the month it's in), so it doesn't have the same ambiguity
+    // a small, context-free glance card does.
+    const dueLabel =
+        task && due && due.tone === 'later' ? `${due.label} (in ${daysUntil(task.dueDate)}d)` : due?.label;
+    const lastLog = activeTank.logs.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
 
-  return (
-    <div className="bg-deepwater rounded-xl px-5 py-[18px] w-[300px]">
-      <div className="flex justify-between items-baseline mb-3.5">
-        <span className="font-display text-[17px] font-medium text-foam">{activeTank.name}</span>
-        {lifetime && <span className="font-mono text-xs text-amber">{Math.abs(lifetime.totalDays)} days</span>}
-      </div>
-      {task && due && (
-        <div className={`rounded-lg px-3 py-2.5 mb-2.5 ${TONE_CLASSES[due.tone]}`}>
-          <div className="text-[13px] font-medium text-foam">{task.label}</div>
-          <div className="text-xs opacity-80">{dueLabel}</div>
+    return (
+        <div className="bg-deepwater rounded-xl px-5 py-[18px] w-[300px]">
+            <div className="flex justify-between items-baseline mb-3.5">
+                <span className="font-display text-[17px] font-medium text-foam">{activeTank.name}</span>
+                {lifetime && <span className="font-mono text-xs text-amber">{Math.abs(lifetime.totalDays)} days</span>}
+            </div>
+            {task && due && (
+                <div className={`rounded-lg px-3 py-2.5 mb-2.5 ${TONE_CLASSES[due.tone]}`}>
+                    <div className="text-[13px] font-medium text-foam">{task.label}</div>
+                    <div className="text-xs opacity-80">{dueLabel}</div>
+                </div>
+            )}
+            {lastLog && (
+                <div className="flex justify-between items-baseline text-[11px] text-foam-dim opacity-70">
+                    <span>
+                        Last logged {new Date(lastLog.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                    <a
+                        href="https://ettran777.github.io/aquariumTool/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-mono text-xs text-amber underline"
+                    >
+                        Open in Tidemark →
+                    </a>
+                </div>
+            )}
+            <div className="opacity-50 mt-3.5">
+                <Waterline />
+            </div>
         </div>
-      )}
-      {lastLog && (
-        <div className="text-[11px] text-foam-dim opacity-70">
-          Last logged {new Date(lastLog.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-        </div>
-      )}
-      <div className="opacity-50 mt-3.5">
-        <Waterline />
-      </div>
-    </div>
-  );
+    );
 }
