@@ -1,4 +1,4 @@
-import{h as e,n as t,p as n,r,s as i,t as a,v as o}from"./index-CkiJzXrh.js";var s=o(e(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
+import{h as e,n as t,p as n,r,s as i,t as a,v as o}from"./index-BBO762VV.js";var s=o(e(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
 
 This document is written for AI assistants helping someone plan or manage an
 aquarium using this app. It has two jobs: give you real, current context on
