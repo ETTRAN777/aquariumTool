@@ -9,15 +9,19 @@
 > saltwater/reef tanks across seven build templates, six of which include
 > a guided stocking questionnaire. Roster, build checklist, weekly log,
 > maintenance schedule, parameter charts, a compatibility page (researched
-> water-parameter targets and automatic predation-risk flagging), and a
+> water-parameter targets and automatic predation-risk flagging), a
 > timeline page (phase-tagged log history plus milestones — some
 > auto-derived from log entries, e.g. a phase change or a roster item's
-> first appearance, others hand-recorded) are all generated from the same
-> underlying tank data.
+> first appearance, others hand-recorded), and Story Mode (a Spotify-
+> Wrapped-style tap-through recap built from that same real data — phase
+> pacing, milestone highlights, mood trends) are all generated from the
+> same underlying tank data. An embeddable widget shows a live tank
+> status card (name, age, phase, next task) on the user's own page via
+> iframe.
 
 ## For AI assistants
 
-- [AI Quickstart & Import Guide](https://ettran777.github.io/aquariumTool/docs.txt): The authoritative reference for an AI assistant helping with this app — full feature context across every page, the JSON import schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf. (This is a plain static mirror of the in-app /docs page — the app itself uses hash-based routing, so /docs by itself isn't reachable by a plain fetch; this .txt file is.)
+- [AI Quickstart & Import Guide](https://ettran777.github.io/aquariumTool/docs.txt): The authoritative reference for an AI assistant helping with this app — full feature context across every page, the JSON import schema, field-by-field generation guidelines, and explicit guidance on when to point a user at the in-app guided questionnaires instead of generating a plan outright. Read this before producing any tank JSON on a user's behalf. (This is a plain static mirror of the AI Quickstart tab specifically — /docs in the app also has a second Features Guide tab written for a human reading it directly, with links to Timeline, Story Mode, and the Widget above; that tab isn't mirrored here since it's not meant to be pasted into an AI. The app itself uses hash-based routing, so /docs by itself isn't reachable by a plain fetch; this .txt file is.)
 - **If a user gives you a full backup export to review or edit**, check for embedded log photos (base64 data URIs on `LogEntry.photoUrls`) before reading further — these are usually the large majority of the file's size and cost real usage for no analytical benefit. If present and not actually needed for the task, tell the user to re-export using the app's "exclude photos" toggle instead; it's still a fully valid, re-importable backup, just far smaller. Re-importing an image-free edit back into the app won't lose the user's existing photos either way — the app restores them from the current version automatically on replace.
 
 ## Site

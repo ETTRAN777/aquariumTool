@@ -244,6 +244,51 @@ they already know.
   (see below) — that linkage is automatic in both directions, whichever
   gets created first.
 
+**Timeline**
+- A proportional, phase-tagged history of the tank's whole build: a
+  horizontal "war timeline" strip segmented by `LogEntry.phase` (the
+  same six build stages as everywhere else — planning, hardscaping,
+  cycling, stocking, acclimating, established), sized by how long the
+  tank actually spent in each one, plus a chronological feed of every
+  log entry and milestone together.
+- Milestones are notable, dated moments — some auto-derived by the app
+  itself (a phase change, a roster item's first appearance in a
+  non-livestock category, the first-ever livestock addition), others
+  hand-recorded directly on this page for anything worth marking that
+  isn't already implied by a phase or roster change (e.g. "Cycling
+  complete," "Founding shrimp added," a health event). A "major" flag
+  (auto-derived for the app's own milestones, left to the user for
+  hand-authored ones) controls whether one shows up in the horizontal
+  strip of standout moments versus only the full feed.
+- A hand-added milestone can optionally link back to a specific Log
+  entry (`linkedLogEntryId`) and/or tag which roster items it's about
+  (`relatedRosterItemIds`) — see the Milestone schema below for the
+  full field reference.
+- This is also where Story Mode (below) is launched from.
+
+**Story Mode**
+- A full-screen, tap-through recap of the tank's build — closer to
+  Spotify Wrapped than a narrative reading mode: a short slide deck
+  built entirely from real data already on the tank (phase pacing,
+  milestone highlights, roster items the user starred in a log entry,
+  an overall "mood vibe" read from logged mood tags, and — only if any
+  exist — a health-event acknowledgment), never fabricated or inferred
+  beyond genuine pattern-to-characterization framing (e.g. noting a
+  tank's mood trended positive over a stretch — never claiming one
+  logged event caused another just because they're close in time).
+- Gated behind a pre-flight inventory screen that's honest about what's
+  actually there ("6 major milestones, 3 log highlights") and what will
+  be thin or skipped entirely (e.g. "no health events logged") before
+  the deck opens, rather than silently skipping slides with nothing to
+  show.
+- A tank with very little history (few log entries, no milestones) will
+  mostly see this gate rather than a full deck — that's expected
+  behavior, not a bug, and not something worth generating fake log/
+  milestone content to work around.
+- Launched from a button on Timeline; not part of the JSON import
+  format below (nothing about Story Mode is stored data — it's
+  entirely computed on the fly from Tank fields that already exist).
+
 **Schedule**
 - Recurring (e.g. "water change every 7 days") or one-off maintenance
   reminders, shown in a real month calendar view alongside an agenda list
@@ -277,6 +322,19 @@ they already know.
   its water type (freshwater/saltwater) after creation.
 - Manage custom fields (add, remove, add from preset).
 - Delete the tank entirely (irreversible without a prior backup export).
+
+**Widget (embeddable)**
+- A small, live status card (tank name, age, current phase, an upcoming
+  or overdue task, last-logged date) that can be embedded via
+  `<iframe>` on the user's own personal page — a startpage, a personal
+  site, anywhere they control the embedding page. Not a public/shareable
+  link on its own; it reads the same browser's local Tidemark data, so
+  it only shows something real when embedded on a page the user
+  actually visits in the same browser where their tank data lives.
+- The embed snippet lives on the in-app Features Guide (see `/docs`
+  below), not Settings.
+- Live app data only — nothing about the widget is part of the JSON
+  import/export format below, same as Story Mode.
 
 **Backup / Import (this document's subject)**
 - Export the current data as a JSON file at any time, via a picker: all
