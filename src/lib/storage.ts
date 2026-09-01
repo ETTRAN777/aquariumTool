@@ -204,8 +204,7 @@ function normalizeRosterItem(
   let id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : undefined;
   if (id === undefined || seenIds.has(id)) {
     warnings.push(
-      `A roster item on "${tankName}" (position ${index + 1}) had a ${
-        id === undefined ? 'missing' : 'duplicate'
+      `A roster item on "${tankName}" (position ${index + 1}) had a ${id === undefined ? 'missing' : 'duplicate'
       } id — a new one was generated.`
     );
     id = crypto.randomUUID();
@@ -309,8 +308,7 @@ function normalizeChecklistTask(
   let id = typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : undefined;
   if (id === undefined || seenIds.has(id)) {
     warnings.push(
-      `A checklist step on "${tankName}" (position ${index + 1}) had a ${
-        id === undefined ? 'missing' : 'duplicate'
+      `A checklist step on "${tankName}" (position ${index + 1}) had a ${id === undefined ? 'missing' : 'duplicate'
       } id — a new one was generated.`
     );
     id = crypto.randomUUID();

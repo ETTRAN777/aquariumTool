@@ -65,6 +65,22 @@ tracks is fully customizable.
 - **Parameters** — water chemistry and any numeric custom fields auto-charted
   over time, so you can *see* trends instead of just logging numbers into a
   void
+- **Timeline** — a proportional, phase-tagged strip of the whole build
+  (planning → hardscaping → cycling → stocking → acclimating →
+  established), plus a chronological feed of every log entry and
+  milestone together. Milestones are notable, dated moments — some
+  auto-derived (a phase change, a roster item's first appearance), some
+  hand-recorded, with an optional link back to a specific log entry
+- **Story Mode** — a full-screen, tap-through recap of the tank's build,
+  closer to Spotify Wrapped than a reading mode: phase pacing, milestone
+  highlights, roster items you starred, an overall mood vibe, and a
+  health-event acknowledgment if any exist — all built from real data
+  already on the tank, gated behind an honest inventory screen for
+  tanks that don't have much history yet
+- **Embeddable widget** — a small, live status card (tank name, age,
+  current phase, next task, last-logged date) you can drop into your
+  own personal page or startpage via `<iframe>` — reads live from the
+  same browser's Tidemark data, no separate setup
 - **Smart import** — bringing in a tank from a backup file checks it against
   what you already have. A genuinely new tank imports normally; an exact
   duplicate is flagged instead of silently cloned; a same-named tank with
@@ -100,10 +116,13 @@ tracks is fully customizable.
   so you can visualize a build before buying anything. Same handoff pattern
   as Compatibility's research prompt — the app never calls an image API
   itself, only assembles the prompt from real data
-- **AI Quickstart & Import Guide** (`/docs` in the app) — the full site
-  context and import schema, written so it can be pasted straight into an
-  AI assistant along with a build plan to generate an importable file from
-  scratch, even for someone who's never used the site before
+- **Docs** (`/docs` in the app) — two tabs: an AI Quickstart & Import
+  Guide, written so it can be pasted straight into an AI assistant along
+  with a build plan to generate an importable file from scratch, even
+  for someone who's never used the site before; and a Features Guide,
+  written for a person reading it directly, covering Story Mode, the
+  Widget, and the AI-handoff prompts (concept image, compatibility
+  research, progress check) with a link straight to each one
 
 ## Why it's built this way
 
