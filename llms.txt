@@ -7,9 +7,11 @@
 > user-triggered Google Drive backup, and non-identifying page-view
 > analytics (no cookies, no individual tracking). Supports freshwater and
 > saltwater/reef tanks across seven build templates, six of which include
-> a guided stocking questionnaire. Roster, build checklist, weekly log,
+> a guided stocking questionnaire. Roster, plan, weekly log,
 > maintenance schedule, parameter charts, a compatibility page (researched
-> water-parameter targets and automatic predation-risk flagging), a
+> water-parameter targets, automatic predation-risk flagging, and a
+> paste-your-research-response auto-fill that turns an AI's reply back
+> into reviewed field values rather than manual retyping), a
 > timeline page (phase-tagged log history plus milestones — some
 > auto-derived from log entries, e.g. a phase change or a roster item's
 > first appearance, others hand-recorded), and Story Mode (a Spotify-
