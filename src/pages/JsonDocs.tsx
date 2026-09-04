@@ -201,14 +201,19 @@ function FeaturesGuide() {
 
       <FeatureCard
         icon="📋"
-        title="Research prompt"
+        title="Research prompt & auto-fill"
         location="Compatibility"
         to="/targets"
       >
         Hands the actual research step to whatever AI you use, for the tank overall or for a single
         roster item — asks explicitly for real, sourced water-parameter ranges rather than a
         fabricated single number, and for an averaged, clearly-marked estimate wherever a source is
-        likely to report a range instead of one figure.
+        likely to report a range instead of one figure. Paste the AI's reply back in on the same
+        item and it gets parsed into candidate field values for review — only ever matched against
+        this prompt's own labels, never guessed at from surrounding prose, so a wrong-but-plausible
+        number can't slip in from somewhere else in the response. Fields the source itself flagged
+        as uncertain, or where two different values were found for the same field, are never
+        pre-selected — nothing writes to the roster until you actually confirm it.
       </FeatureCard>
 
       <FeatureCard
