@@ -18,6 +18,7 @@ import {
   type TargetStatus,
 } from '../lib/targets';
 import { buildStockingLoadResearchPrompt } from '../lib/planSummary';
+import ResearchAutoFill from '../components/ResearchAutoFill';
 import AutoResizeTextarea from '../components/AutoResizeTextarea';
 import type { RosterItem, RosterItemTrait, WaterParams, CustomFieldType, CustomFieldValue } from '../types';
 
@@ -501,12 +502,16 @@ export default function Targets() {
                       </div>
                     )}
 
-                    <button
-                      onClick={() => copyPrompt(item)}
-                      className="btn btn-secondary text-xs py-1.5 px-3"
-                    >
-                      {copiedId === item.id ? '✓ Copied to clipboard' : '📋 Copy research prompt'}
-                    </button>
+                    <div className="flex flex-wrap items-start gap-2">
+                      <button
+                        onClick={() => copyPrompt(item)}
+                        className="btn btn-secondary text-xs py-1.5 px-3"
+                      >
+                        {copiedId === item.id ? '✓ Copied to clipboard' : '📋 Copy research prompt'}
+                      </button>
+
+                      <ResearchAutoFill item={item} updateRosterItem={updateRosterItem} />
+                    </div>
 
                     <div>
                       <p className="field-label mb-2">Water parameter targets (optional)</p>

@@ -121,7 +121,7 @@ export default function Dashboard() {
       {/* Hero: build progress */}
       <section>
         <p className="font-mono text-xs tracking-widest text-amber uppercase mb-2">
-          Build progress
+          Plan progress
         </p>
         <div className="flex items-end gap-4 mb-3">
           <span className="font-display text-6xl font-semibold">{progressPct}%</span>
@@ -139,12 +139,12 @@ export default function Dashboard() {
           <p className="mt-3 text-sm text-foam-dim">
             Next up: <span className="text-foam font-medium">{nextTask.label}</span>{' '}
             <Link to="/checklist" className="text-amber hover:underline">
-              → checklist
+              → plan
             </Link>
           </p>
         ) : (
           <p className="mt-3 text-sm text-foam-dim">
-            Every build step is checked off. Time to log the launch.
+            Every step in your plan is checked off — add more anytime.
           </p>
         )}
         <div className="mt-2 flex items-center gap-3">
@@ -173,7 +173,7 @@ export default function Dashboard() {
 
       {/* Phases bar — where the tank actually is across the 6-stage build
           sequence (Planning -> ... -> Established), tagged on Log
-          entries via LogEntry.phase. Distinct from "Build progress"
+          entries via LogEntry.phase. Distinct from "Plan progress"
           above, which tracks checklist task completion — a tank can be
           100% checklist-complete and still be in an early phase, or vice
           versa; they're not the same axis. */}

@@ -74,7 +74,7 @@ function buildRosterSection(tank: Tank): string {
 }
 
 function buildChecklistSection(tank: Tank): string {
-  const lines: string[] = ['## Build checklist'];
+  const lines: string[] = ['## Plan'];
   if (tank.checklist.length === 0) {
     lines.push('(No checklist steps yet.)');
     return lines.join('\n');

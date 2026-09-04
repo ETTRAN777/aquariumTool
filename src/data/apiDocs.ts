@@ -223,12 +223,15 @@ they already know.
   (toggle which of the two comes first) — same display-only caveat as
   Roster's filters above.
 
-**Build Checklist**
-- Ordered setup steps with two kinds of dependencies: \`dependsOn\` (this
+**Plan**
+- Ordered planning steps covering the tank's whole lifecycle — not just
+  initial setup, but anything worth tracking as a step at all, including
+  long-tail items that may not resolve for months or that a tank might
+  carry indefinitely. Two kinds of dependencies: \`dependsOn\` (this
   step can't be checked off until another step is) and \`rosterLinks\`
   (this step can't be checked off until a specific roster item reaches a
   given status, e.g. "arrived").
-- When a questionnaire produces a roster, the checklist automatically
+- When a questionnaire produces a roster, the plan automatically
   gets one "Source X" step per item, each gated on that item reaching
   "arrived" — not hand-written, generated from the actual roster.
 
@@ -510,7 +513,8 @@ when nothing above fits.
 
 ## ChecklistTask
 
-A build step. Steps can depend on other steps being marked done, and/or on
+A planning step, covering the tank's whole lifecycle — not just initial
+setup. Steps can depend on other steps being marked done, and/or on
 a roster item reaching a given status — this is what actually locks/unlocks
 steps in the app's UI.
 
@@ -551,15 +555,19 @@ A maintenance reminder — recurring (e.g. weekly water changes) or a one-off
 date. Optional; omit entirely, or output \`[]\`, if the plan doesn't mention
 any recurring cadence.
 
-**Not the same thing as the checklist, even though both support a due
-date.** Checklist is one-time build-phase steps (source equipment, build
-hardscape, cycle, stock) — that sequence belongs in \`checklist\`, using its
-own \`dueDate\` field if specific dates are known, never duplicated into
-\`schedule\` as one-off entries. Schedule is for what happens *after* the
-build: ongoing maintenance that recurs, or a genuine one-off future
-reminder unrelated to setup (e.g. "revisit stocking decision in 3
-months"). If every \`schedule\` entry you're about to write is really just
-a restated build step with a date attached, that content belongs in
+**Not the same thing as the plan (the \`checklist\` field), even though
+both support a due date.** The plan covers the tank's steps across its
+whole lifecycle — not just initial setup (source equipment, build
+hardscape, cycle, stock), but any planned step at all, including
+long-tail ones that may not resolve for months or that a tank might
+carry indefinitely (e.g. "add a final species once the quarantine tank
+is free"). That belongs in \`checklist\`, using its own \`dueDate\` field
+if a specific date is known, never duplicated into \`schedule\` as a
+one-off entry. Schedule is specifically for *recurring* maintenance, or
+a genuine one-off future reminder that isn't really a planning step at
+all (e.g. "revisit stocking decision in 3 months" as a check-in, not a
+task). If every \`schedule\` entry you're about to write is really just
+a restated planning step with a date attached, that content belongs in
 \`checklist\` instead — an empty \`schedule: []\` is correct and expected
 for a plan that never mentions any maintenance cadence.
 
@@ -619,7 +627,7 @@ A notable, dated moment in the tank's build (e.g. "Cycling complete," "Founding 
 - If the plan mentions a maintenance cadence (weekly water changes, dosing
   schedule, feeding routine), include it as a ScheduleTask with
   \`recurrenceDays\` set. Don't invent a cadence the plan never mentions —
-  and don't fill an empty schedule by repurposing checklist build steps as
+  and don't fill an empty schedule by repurposing checklist/plan steps as
   one-off entries instead; see the note under ScheduleTask above. If the
   plan gives that cadence a clear end point (e.g. "weekly for the first
   month, then normal maintenance"), set \`endDate\` accordingly — otherwise

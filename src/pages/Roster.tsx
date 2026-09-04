@@ -93,6 +93,37 @@ export default function Roster() {
   // automatically splits the display back into two numbers on its own.
   const allBudgetedItemsOrdered = budgetedItems.length > 0 && orderedPlusItems.length === budgetedItems.length;
 
+  const [copiedList, setCopiedList] = useState<'full' | 'no-desc' | null>(null);
+
+  function copyRosterList(variant: 'full' | 'no-desc') {
+    // Deliberately NOT grouped by category the way planSummary.ts's full
+    // roster section is — the whole point here is "whatever's visible
+    // right now, in this exact order," so a starred item floated to the
+    // top by the active sort has to stay at the top of the copied text
+    // too, not get silently re-sorted back into category groups.
+    const filterLabel = filter === 'all' ? 'All' : CATEGORY_LABELS[filter];
+    const sortLabel =
+      sortMode === 'default' ? 'Default order' : sortMode === 'category' ? 'By category' : 'By status';
+    const lines = [`Roster — ${filterLabel}, ${sortLabel}`, ''];
+    for (const item of items) {
+      const qty = item.quantity && item.quantity > 1 ? `${item.quantity}x ` : '';
+      const status = STATUS_LABELS[item.status];
+      const detail = variant === 'full' && item.detail ? ` — ${item.detail}` : '';
+      lines.push(`- ${qty}${item.name} (${status})${detail}`);
+    }
+    if (items.length === 0) lines.push('(Nothing matches this filter.)');
+    navigator.clipboard
+      .writeText(lines.join('\n'))
+      .then(() => {
+        setCopiedList(variant);
+        setTimeout(() => setCopiedList(null), 2000);
+      })
+      .catch(() => {
+        // Clipboard permission denied or unavailable — fail quietly rather
+        // than throw, same as every other copy button in the app.
+      });
+  }
+
   function cycleStatus(item: RosterItem) {
     const idx = STATUS_ORDER.indexOf(item.status);
     const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
@@ -145,6 +176,22 @@ export default function Roster() {
           <SortPill active={sortMode === 'category'} onClick={() => setSortMode('category')} label="By category" />
           <SortPill active={sortMode === 'status'} onClick={() => setSortMode('status')} label="By status" />
         </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => copyRosterList('full')}
+          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedList === 'full' ? '✓ Copied to clipboard' : '📋 Copy visible list'}
+        </button>
+        <span className="text-foam-dim/30 text-xs">·</span>
+        <button
+          onClick={() => copyRosterList('no-desc')}
+          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedList === 'no-desc' ? '✓ Copied to clipboard' : 'no description'}
+        </button>
       </div>
 
       {showForm && (

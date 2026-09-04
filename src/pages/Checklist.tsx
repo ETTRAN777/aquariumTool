@@ -131,7 +131,7 @@ export default function Checklist() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Build Checklist</h2>
+        <h2 className="font-display text-2xl font-semibold">Plan</h2>
         <p className="text-sm text-foam-dim mt-1">
           {doneCount} of {checklist.length} done. Steps can wait on other steps, or on a
           roster item reaching a status — like a step staying locked until its item shows
