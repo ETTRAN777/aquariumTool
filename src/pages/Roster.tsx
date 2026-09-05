@@ -202,6 +202,7 @@ export default function Roster() {
           }}
           onCancel={() => setShowForm(false)}
           submitLabel="Add to roster"
+          defaultCategory={filter !== 'all' ? filter : undefined}
         />
       )}
 
@@ -388,15 +389,20 @@ function ItemForm({
   onCancel,
   submitLabel,
   editing = false,
+  defaultCategory,
 }: {
   initial?: RosterItem;
   onSubmit: (item: RosterItem) => void;
   onCancel: () => void;
   submitLabel: string;
   editing?: boolean;
+  // Only meaningful for the Add flow — editing an existing item always
+  // uses that item's own real category regardless of whatever filter
+  // happens to be active on the page behind it.
+  defaultCategory?: RosterItem['category'];
 }) {
   const [name, setName] = useState(initial?.name ?? '');
-  const [category, setCategory] = useState<RosterItem['category']>(initial?.category ?? 'plant');
+  const [category, setCategory] = useState<RosterItem['category']>(initial?.category ?? defaultCategory ?? 'plant');
   const [status, setStatus] = useState<SourcingStatus>(initial?.status ?? 'wishlist');
   const [detail, setDetail] = useState(initial?.detail ?? '');
   const [source, setSource] = useState(initial?.source ?? '');
@@ -406,6 +412,13 @@ function ItemForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    // min="0" on the inputs handles the common case (typing/spinning a
+    // negative value natively blocks form submission), but this is the
+    // real guard — never trust a browser attribute alone, same as
+    // everywhere else in this app. A negative value is treated as if the
+    // field were left empty, not silently written as-is.
+    const parsedQuantity = quantity ? Number(quantity) : undefined;
+    const parsedCost = cost ? Number(cost) : undefined;
     onSubmit({
       id: initial?.id ?? crypto.randomUUID(),
       name: name.trim(),
@@ -413,8 +426,8 @@ function ItemForm({
       status,
       detail: detail.trim() || undefined,
       source: source.trim() || undefined,
-      quantity: quantity ? Number(quantity) : undefined,
-      cost: cost ? Number(cost) : undefined,
+      quantity: parsedQuantity !== undefined && parsedQuantity >= 0 ? parsedQuantity : undefined,
+      cost: parsedCost !== undefined && parsedCost >= 0 ? parsedCost : undefined,
     });
   }
 
@@ -456,6 +469,7 @@ function ItemForm({
       <input
         placeholder="Quantity (optional)"
         type="number"
+        min="0"
         value={quantity}
         onChange={(e) => setQuantity(e.target.value)}
         className="field"
@@ -463,6 +477,7 @@ function ItemForm({
       <input
         placeholder="Est. cost (optional)"
         type="number"
+        min="0"
         step="0.01"
         value={cost}
         onChange={(e) => setCost(e.target.value)}
