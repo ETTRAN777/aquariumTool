@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { JSON_FORMAT_DOCS } from '../data/apiDocs';
 import Toast from '../components/Toast';
 import CodeBlock from '../components/CodeBlock';
-import { splitFencedCode, splitTables, type ProseSegment } from '../lib/docParsing';
+import { splitFencedCode, splitProse, type ProseSegment } from '../lib/docParsing';
 
 // Computed once at module load, not per-render or even per-component-
 // instance — JSON_FORMAT_DOCS is a static constant, so there's no
@@ -102,18 +102,21 @@ export default function JsonDocs() {
   );
 }
 
-// Only carves tables out of prose — everything else (headers, bold
-// text, bullet lists) still renders exactly as it always has, plain
-// preformatted text. Full markdown rendering is a bigger, different
-// undertaking than what tables specifically needed.
+// Carves headers, bullet lists, and tables out of prose — bold text and
+// inline code spans are left as literal ** and ` characters on purpose,
+// a deliberate scope line, not an oversight (see docParsing.ts's own
+// header comment for why those specifically are a bigger, different kind
+// of parsing than what this needs).
 function ProseWithTables({ content }: { content: string }) {
-  const segments = splitTables(content);
+  const segments = splitProse(content);
   return (
     <>
-      {segments.map((segment, i) =>
-        segment.type === 'table' ? (
-          <MarkdownTable key={i} segment={segment} />
-        ) : (
+      {segments.map((segment, i) => {
+        if (segment.type === 'table') return <MarkdownTable key={i} segment={segment} />;
+        if (segment.type === 'heading') return <ProseHeading key={i} segment={segment} />;
+        if (segment.type === 'boldLine') return <ProseBoldLine key={i} segment={segment} />;
+        if (segment.type === 'bullets') return <ProseBullets key={i} segment={segment} />;
+        return (
           segment.content.trim() && (
             <pre
               key={i}
@@ -122,9 +125,42 @@ function ProseWithTables({ content }: { content: string }) {
               {segment.content}
             </pre>
           )
-        )
-      )}
+        );
+      })}
     </>
+  );
+}
+
+function ProseHeading({ segment }: { segment: Extract<ProseSegment, { type: 'heading' }> }) {
+  const classes = {
+    1: 'font-display text-xl font-semibold text-foam mt-2',
+    2: 'font-display text-lg font-semibold text-foam mt-4',
+    3: 'font-display text-base font-semibold text-sand mt-3',
+  } as const;
+  const Tag = (`h${segment.level + 1}`) as 'h2' | 'h3' | 'h4'; // page's own real <h1> stays the only h1
+  return <Tag className={classes[segment.level]}>{segment.content}</Tag>;
+}
+
+// One tier below ProseHeading's own H3 — a feature name introducing its
+// own block of bullets within the Site Feature list, not a real
+// section header. Reuses the app's existing "eyebrow label" convention
+// (font-mono, uppercase, tracking-wide, amber) already used elsewhere
+// for this exact kind of small structural marker, rather than
+// inventing a new visual language for it.
+function ProseBoldLine({ segment }: { segment: Extract<ProseSegment, { type: 'boldLine' }> }) {
+  return <p className="font-mono text-xs uppercase tracking-wide text-amber mt-3">{segment.content}</p>;
+}
+
+function ProseBullets({ segment }: { segment: Extract<ProseSegment, { type: 'bullets' }> }) {
+  return (
+    <ul className="space-y-1 text-xs text-foam-dim leading-relaxed">
+      {segment.items.map((item, i) => (
+        <li key={i} className={`flex gap-2 ${item.nested ? 'ml-5' : ''}`}>
+          <span className="text-amber shrink-0">{item.nested ? '·' : '•'}</span>
+          <span>{item.text}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

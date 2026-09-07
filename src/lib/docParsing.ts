@@ -1,9 +1,11 @@
-// Deliberately NOT a markdown parser — the AI Quickstart guide's prose
-// (headers, bold text, bullet lists) renders exactly as it always has,
-// plain preformatted text. This only carves out the two structures that
-// were actually hard to read as raw text: fenced code blocks and pipe
-// tables. Expanding further (real header/bold/list rendering) is a
-// bigger, different undertaking than what was actually asked for here.
+// Deliberately NOT a full markdown parser — only carves out the
+// structures that were actually hard to read as raw text: fenced code
+// blocks, pipe tables, headers, and bullet lists. Bold text and inline
+// code spans are left as literal ** and ` characters on purpose — those
+// need a real inline tokenizer (splitting text *within* a line into
+// styled spans), a meaningfully different and bigger kind of parsing
+// than the line-level classification everything here does. Scoped down
+// to line-level structure deliberately, not by omission.
 
 export type DocSegment =
   | { type: 'prose'; content: string }
@@ -30,7 +32,12 @@ export function splitFencedCode(doc: string): DocSegment[] {
   return segments;
 }
 
-export type ProseSegment = { type: 'text'; content: string } | { type: 'table'; headers: string[]; rows: string[][] };
+export type ProseSegment =
+  | { type: 'text'; content: string }
+  | { type: 'table'; headers: string[]; rows: string[][] }
+  | { type: 'heading'; level: 1 | 2 | 3; content: string }
+  | { type: 'bullets'; items: { text: string; nested: boolean }[] }
+  | { type: 'boldLine'; content: string };
 
 // Regex/line-based, not a real markdown parser — detects a pipe-table
 // by its header row followed by a |---|---| separator row, which is
@@ -39,7 +46,12 @@ export type ProseSegment = { type: 'text'; content: string } | { type: 'table'; 
 // within a cell — the real content here has none, and adding that
 // complexity for a case that doesn't occur would be solving a problem
 // that isn't there.
-export function splitTables(text: string): ProseSegment[] {
+//
+// Headers and bullets get the same treatment as tables — a reliable
+// line-start signal, checked against the real content before writing
+// this (H1/H2/H3 only, no H4+; only "- " bullets, no "*" variant; a
+// handful of once-indented "  - " bullets, everything else flat).
+export function splitProse(text: string): ProseSegment[] {
   const lines = text.split('\n');
   const segments: ProseSegment[] = [];
   let textBuffer: string[] = [];
@@ -61,6 +73,21 @@ export function splitTables(text: string): ProseSegment[] {
       .split(/(?<!\\)\|/)
       .map((cell) => cell.trim().replace(/\\\|/g, '|'));
 
+  const headingMatch = (line: string) => line.match(/^(#{1,3}) (.+)$/);
+  const bulletMatch = (line: string) => line.match(/^(\s*)- (.+)$/);
+  // A whole line that's nothing but **bold text** — the doc's own
+  // pattern for a feature-name pseudo-heading (`**Roster**`, `**Plan**`,
+  // etc.), distinct from bold used inline within running prose (e.g.
+  // `**Fin-nipping risk** — pairwise, same shape as...`), which this
+  // deliberately does NOT catch — that needs real inline tokenization to
+  // render correctly (bold span followed by plain text on the same
+  // line), a bigger, different kind of parsing than anything here does.
+  // [^*]+ rather than .+ so this can't accidentally cross into a second
+  // **bold** span later on the same line; $ requires the line to end
+  // immediately after the closing **, so a line with anything else
+  // after it (plain text, italics) correctly falls through untouched.
+  const boldLineMatch = (line: string) => line.match(/^\*\*([^*]+)\*\*$/);
+
   function flushText() {
     if (textBuffer.length > 0) {
       segments.push({ type: 'text', content: textBuffer.join('\n') });
@@ -69,6 +96,10 @@ export function splitTables(text: string): ProseSegment[] {
   }
 
   while (i < lines.length) {
+    const heading = headingMatch(lines[i]);
+    const bullet = bulletMatch(lines[i]);
+    const boldLine = boldLineMatch(lines[i]);
+
     if (isPipeRow(lines[i]) && i + 1 < lines.length && isSeparatorRow(lines[i + 1])) {
       flushText();
       const headers = parseRow(lines[i]);
@@ -79,6 +110,24 @@ export function splitTables(text: string): ProseSegment[] {
         i++;
       }
       segments.push({ type: 'table', headers, rows });
+    } else if (heading) {
+      flushText();
+      segments.push({ type: 'heading', level: heading[1].length as 1 | 2 | 3, content: heading[2] });
+      i++;
+    } else if (boldLine) {
+      flushText();
+      segments.push({ type: 'boldLine', content: boldLine[1] });
+      i++;
+    } else if (bullet) {
+      flushText();
+      const items: { text: string; nested: boolean }[] = [];
+      while (i < lines.length) {
+        const b = bulletMatch(lines[i]);
+        if (!b) break;
+        items.push({ text: b[2], nested: b[1].length > 0 });
+        i++;
+      }
+      segments.push({ type: 'bullets', items });
     } else {
       textBuffer.push(lines[i]);
       i++;
