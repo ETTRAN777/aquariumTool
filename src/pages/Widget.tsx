@@ -188,21 +188,21 @@ function WidgetContent({ overrideTank }: { overrideTank?: Tank | null }) {
                     <div className="text-xs opacity-80">{dueLabel}</div>
                 </div>
             )}
-            {lastLog && (
-                <div className="flex justify-between items-baseline text-[11px] text-foam-dim opacity-70">
+            <div className="flex justify-between items-baseline text-[11px] text-foam-dim opacity-70">
+                {lastLog && (
                     <span>
                         Last logged {new Date(lastLog.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </span>
-                    <a
-                        href="https://ettran777.github.io/aquariumTool/"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-mono text-xs text-amber underline"
-                    >
-                        Open in Tidemark →
-                    </a>
-                </div>
-            )}
+                )}
+                <a
+                    href="https://ettran777.github.io/aquariumTool/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-xs text-amber underline"
+                >
+                    Open in Tidemark →
+                </a>
+            </div>
             <div className="opacity-50 mt-3.5">
                 <Waterline />
             </div>
