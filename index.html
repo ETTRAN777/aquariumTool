@@ -100,9 +100,20 @@
       GoatCounter's own script still loads normally for real pageview
       counting either way — this only ever intercepts the one-time toggle
       case, never suppresses the counting script itself.
+
+      Also handles the case GoatCounter's own docs warn about directly:
+      editing just the hash on a page already open is a same-page
+      navigation, not a full reload — browsers don't re-run <head>
+      scripts for that, only hashchange listeners, which is why
+      GoatCounter's own instructions say an F5 may be needed. Since
+      HashRouter already has to listen for hashchange to do client-side
+      routing without a full reload, the same check gets attached there
+      too, so this actually works without the manual refresh instead of
+      inheriting that limitation.
     -->
     <script>
-      if (location.hash === '#toggle-goatcounter') {
+      function checkGoatCounterToggle() {
+        if (location.hash !== '#toggle-goatcounter') return;
         if (localStorage.getItem('skipgc') === 't') {
           localStorage.removeItem('skipgc');
           alert('GoatCounter tracking is now ENABLED in this browser.');
@@ -112,6 +123,8 @@
         }
         history.replaceState(null, '', location.pathname + location.search);
       }
+      checkGoatCounterToggle();
+      window.addEventListener('hashchange', checkGoatCounterToggle);
     </script>
   </head>
   <body>
