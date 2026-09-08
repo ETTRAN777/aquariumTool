@@ -272,6 +272,17 @@ function FeaturesGuide() {
         </p>
         <CodeBlock language="html" code={WIDGET_EMBED_SNIPPET} />
       </FeatureCard>
+
+      <FeatureCard icon="📊" title="Opt out of visit tracking">
+        This site uses GoatCounter for basic, cookie-free page-view analytics — no personal data,
+        no cross-site tracking. If you would like to opt out, GoatCounter has a real, built-in opt-out:
+        visiting the site with{' '}
+        <code className="font-mono text-amber text-xs bg-deepwater-2 rounded px-1 py-0.5">
+          #toggle-goatcounter
+        </code>{' '}
+        appended to the URL flips tracking
+        off for that browser specifically, with a popup confirming it took effect
+      </FeatureCard>
     </div>
   );
 }

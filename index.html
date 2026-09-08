@@ -78,6 +78,41 @@
         ]
       }
     </script>
+
+    <!--
+      GoatCounter's own count.js (github.com/arp242/goatcounter,
+      public/count.js) implements the #toggle-goatcounter opt-out link as
+      a one-time check of location.hash on script load — toggling a
+      localStorage flag and showing a native alert() — and never clears
+      the hash afterward. That collides with this app's HashRouter, which
+      reads location.hash to pick a route: "#toggle-goatcounter" matches
+      no real route, so it would render the catch-all (CreateTank) instead
+      of wherever the person actually meant to land, and the stale hash
+      would stick around to accidentally re-toggle on a future reload.
+
+      Handled here instead — before React mounts, and deterministically
+      before GoatCounter's own script has a chance to run its check too,
+      since that script loads async with no guaranteed order relative to
+      anything else on the page. This replicates GoatCounter's own logic
+      exactly (same localStorage key/value its own filter() function
+      reads), then strips the hash via replaceState the moment the alert
+      is dismissed, so HashRouter never sees anything but a clean URL.
+      GoatCounter's own script still loads normally for real pageview
+      counting either way — this only ever intercepts the one-time toggle
+      case, never suppresses the counting script itself.
+    -->
+    <script>
+      if (location.hash === '#toggle-goatcounter') {
+        if (localStorage.getItem('skipgc') === 't') {
+          localStorage.removeItem('skipgc');
+          alert('GoatCounter tracking is now ENABLED in this browser.');
+        } else {
+          localStorage.setItem('skipgc', 't');
+          alert('GoatCounter tracking is now DISABLED in this browser.');
+        }
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
