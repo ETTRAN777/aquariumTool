@@ -110,6 +110,23 @@
       routing without a full reload, the same check gets attached there
       too, so this actually works without the manual refresh instead of
       inheriting that limitation.
+
+      One more subtlety this needs to account for: history.replaceState
+      deliberately does NOT fire any navigation event — that's the whole
+      point of "replace," a silent URL update. HashRouter's own internal
+      routing needs to find out regardless, so — checked directly against
+      the actual installed react-router source (createHashHistory /
+      getUrlBasedHistory in react-router/dist) rather than assumed —
+      react-router listens for a real browser "popstate" event
+      specifically, not "hashchange" at all, and its handler
+      (handlePop()) takes no payload; it just re-reads window.location
+      and history.state fresh whenever it's invoked. So a synthetic
+      PopStateEvent with no state needed is what actually reaches it —
+      dispatching a hashchange event here (an earlier attempt at this
+      same fix) compiles fine and never throws, but silently never
+      reaches react-router's listener at all, which is exactly why that
+      version fixed the alert timing but not the stuck-on-the-wrong-route
+      symptom that followed it.
     -->
     <script>
       function checkGoatCounterToggle() {
@@ -122,6 +139,7 @@
           alert('GoatCounter tracking is now DISABLED in this browser.');
         }
         history.replaceState(null, '', location.pathname + location.search);
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
       checkGoatCounterToggle();
       window.addEventListener('hashchange', checkGoatCounterToggle);
