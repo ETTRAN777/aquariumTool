@@ -6,6 +6,7 @@ import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS } from '../lib/constants
 import { currentPhase, tankPhaseDuration, formatTankAge } from '../lib/duration';
 import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '../lib/conceptImage';
 import { buildPlanSummary } from '../lib/planSummary';
+import { effectiveDueDate } from '../lib/schedule';
 import type { CustomFieldValue } from '../types';
 
 // Compact relative phrasing for the Dashboard's "last milestone" glance —
@@ -83,7 +84,18 @@ export default function Dashboard() {
   const latestLog = logs[0];
 
   const today = todayIso();
-  const dueCount = schedule.filter((t) => !t.done && t.dueDate <= today).length;
+  // Not a raw dueDate comparison on purpose — a task can't meaningfully
+  // be "due" before the tank itself has started (checked directly: this
+  // used to just compare t.dueDate <= today, the exact same bug already
+  // found and fixed in Schedule.tsx/Widget.tsx, just a third,
+  // previously-unnoticed place it was also happening). Tasks with no
+  // real effective date yet (a one-off dated before startDate, waiting
+  // on a manual re-date) are excluded here too, not counted as due.
+  const dueCount = schedule.filter((t) => {
+    if (t.done) return false;
+    const effective = effectiveDueDate(t, activeTank.startDate);
+    return effective !== null && effective <= today;
+  }).length;
 
   // Mood leads the tracked-fields row regardless of field type or order —
   // it's the one thing tracked on every tank by design, so it gets a fixed

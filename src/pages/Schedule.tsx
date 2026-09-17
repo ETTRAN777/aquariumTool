@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
-import { daysUntil, formatDue, TONE_CLASSES } from '../lib/schedule';
+import { daysUntil, formatDue, effectiveDueDate, TONE_CLASSES } from '../lib/schedule';
 import type { ScheduleTask } from '../types';
 import Toast from '../components/Toast';
 
@@ -61,20 +61,26 @@ interface CalendarOccurrence {
 function occurrencesInRange(
   schedule: ScheduleTask[],
   rangeStart: string,
-  rangeEnd: string
+  rangeEnd: string,
+  startDate: string | undefined
 ): CalendarOccurrence[] {
   const occurrences: CalendarOccurrence[] = [];
   for (const t of schedule) {
     if (t.done) continue;
-    // A task's own endDate (if set) is a hard ceiling on top of the
-    // calendar's visible range — never project past it, even if the
-    // visible month extends further.
+    // A one-off task with no honest corrected date (effectiveDueDate
+    // returns null — see its own comment in schedule.ts) still gets
+    // plotted at its own raw dueDate rather than hidden from the
+    // calendar entirely. It's flagged separately in the aside as
+    // needing a new date, but still has to be reachable through the
+    // normal calendar/day-agenda flow — that's exactly how the aside
+    // now navigates to it, rather than a second, separate edit surface.
+    const effective = effectiveDueDate(t, startDate) ?? t.dueDate;
     const cap = t.endDate && t.endDate < rangeEnd ? t.endDate : rangeEnd;
-    if (t.dueDate >= rangeStart && t.dueDate <= rangeEnd && (!t.endDate || t.dueDate <= t.endDate)) {
-      occurrences.push({ task: t, date: t.dueDate, actual: true });
+    if (effective >= rangeStart && effective <= rangeEnd && (!t.endDate || effective <= t.endDate)) {
+      occurrences.push({ task: t, date: effective, actual: true });
     }
     if (t.recurrenceDays) {
-      let d = t.dueDate;
+      let d = effective;
       while (true) {
         d = addDays(d, t.recurrenceDays);
         if (d > cap) break;
@@ -114,9 +120,18 @@ export default function Schedule() {
 
   const active = schedule.filter((t) => !t.done);
   const finished = schedule.filter((t) => t.done);
-  const overdue = active
-    .filter((t) => daysUntil(t.dueDate) < 0)
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  // Every active task's corrected date, computed once here and reused by
+  // the overdue banner, the calendar, and the aside below — never each
+  // one computing its own copy that could quietly drift from the others.
+  const activeWithEffective = active.map((t) => ({ task: t, effective: effectiveDueDate(t, tank.startDate) }));
+  // One-off tasks dated before the tank's own start, with no honest date
+  // to compute — see effectiveDueDate's own comment for why these are
+  // deliberately not auto-placed. Surfaced only in the aside.
+  const needsNewDate = activeWithEffective.filter((x) => x.effective === null).map((x) => x.task);
+  const overdue = activeWithEffective
+    .filter((x): x is { task: ScheduleTask; effective: string } => x.effective !== null && daysUntil(x.effective) < 0)
+    .sort((a, b) => a.effective.localeCompare(b.effective));
 
   const grid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
   const gridStart = toIsoDate(grid[0]);
@@ -124,13 +139,13 @@ export default function Schedule() {
 
   const occurrencesByDate = useMemo(() => {
     const map = new Map<string, CalendarOccurrence[]>();
-    for (const occ of occurrencesInRange(active, gridStart, gridEnd)) {
+    for (const occ of occurrencesInRange(active, gridStart, gridEnd, tank.startDate)) {
       const list = map.get(occ.date) ?? [];
       list.push(occ);
       map.set(occ.date, list);
     }
     return map;
-  }, [active, gridStart, gridEnd]);
+  }, [active, gridStart, gridEnd, tank.startDate]);
 
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, {
     month: 'long',
@@ -162,7 +177,7 @@ export default function Schedule() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div>
         <h2 className="font-display text-2xl font-semibold">Schedule</h2>
       </div>
@@ -172,18 +187,26 @@ export default function Schedule() {
           <span className="text-xs font-mono text-coral uppercase tracking-wide shrink-0">
             ⚠ Overdue
           </span>
-          {overdue.map((t) => (
+          {overdue.map(({ task, effective }) => (
             <button
-              key={t.id}
-              onClick={() => jumpTo(t.dueDate)}
+              key={task.id}
+              onClick={() => jumpTo(effective)}
               className="pill text-[11px] py-1 px-2 bg-coral/15 text-coral hover:bg-coral/25 transition-colors"
             >
-              {t.label} · {formatDue(t.dueDate).label}
+              {task.label} · {formatDue(effective).label}
             </button>
           ))}
         </div>
       )}
 
+      {/* Calendar + day agenda stay the primary, familiar flow; the aside
+          alongside is purely supplementary — every active task, regardless
+          of what month the calendar happens to be showing, so nothing can
+          go unnoticed just because it isn't in the visible range. Found
+          necessary directly: a real task sat undiscovered for months
+          because nothing outside the current month's grid ever surfaced it. */}
+      <div className="grid lg:grid-cols-[1fr_320px] gap-6 items-start">
+      <div className="space-y-6">
       {/* Calendar */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -218,6 +241,7 @@ export default function Schedule() {
             const inMonth = d.getMonth() === viewMonth;
             const isToday = dateStr === todayIso();
             const isSelected = dateStr === selectedDate;
+            const isStartDate = !!tank.startDate && dateStr === tank.startDate;
             const dayOccurrences = occurrencesByDate.get(dateStr) ?? [];
             const shown = dayOccurrences.slice(0, 3);
             const overflow = dayOccurrences.length - shown.length;
@@ -230,7 +254,7 @@ export default function Schedule() {
                   setShowAdd(false);
                   setEditingId(null);
                 }}
-                className={`min-h-16 sm:min-h-20 rounded-md border p-1.5 text-left transition-colors flex flex-col gap-1 ${
+                className={`relative min-h-16 sm:min-h-20 rounded-md border p-1.5 text-left transition-colors flex flex-col gap-1 ${
                   isSelected
                     ? 'border-amber bg-amber/10'
                     : isToday
@@ -238,6 +262,23 @@ export default function Schedule() {
                     : 'border-moss/15 hover:border-moss/40 bg-deepwater-2/50'
                 } ${!inMonth ? 'opacity-35' : ''}`}
               >
+                {/* A corner overlay, not a third row in the cell's own
+                    flex column — the cell is already tight at min-h-16 on
+                    mobile with the day number and occurrence dots; a solid,
+                    bolder pill riding outside the normal flow reads clearly
+                    at a glance without competing for that limited space or
+                    risking overflow. Solid fill rather than the subtle
+                    translucent pill treatment used elsewhere on purpose —
+                    this one specific day is meant to stand out, not blend
+                    in the way an ordinary status pill would. */}
+                {isStartDate && (
+                  <span
+                    title="Tank start date"
+                    className="absolute -top-1.5 -right-1.5 pill text-[9px] leading-none py-0.5 px-1.5 bg-amber text-deepwater font-bold shadow-sm"
+                  >
+                    🌊 Start
+                  </span>
+                )}
                 <span
                   className={`text-xs font-mono ${isToday ? 'text-amber font-bold' : 'text-foam-dim'}`}
                 >
@@ -331,9 +372,15 @@ export default function Schedule() {
                   </div>
                   <p className="text-[11px] text-foam-dim/50 mt-1.5">
                     Preview only — becomes actionable once it's actually due, on{' '}
-                    {formatDue(task.dueDate).tone === 'later'
-                      ? parseIsoDate(task.dueDate).toLocaleDateString()
-                      : formatDue(task.dueDate).label.toLowerCase()}
+                    {(() => {
+                      // The real, current occurrence's corrected date, not
+                      // task.dueDate directly — this preview is a future
+                      // instance beyond that one, and the caption is
+                      // specifically about when the actionable one lands.
+                      const actualDue = effectiveDueDate(task, tank.startDate)!;
+                      const due = formatDue(actualDue);
+                      return due.tone === 'later' ? parseIsoDate(actualDue).toLocaleDateString() : due.label.toLowerCase();
+                    })()}
                     {task.endDate ? ` (series ends ${parseIsoDate(task.endDate).toLocaleDateString()})` : ''}
                     .
                   </p>
@@ -356,7 +403,7 @@ export default function Schedule() {
               );
             }
 
-            const due = formatDue(task.dueDate);
+            const due = formatDue(occ.date);
             const deleting = pendingDeleteId === task.id;
 
             return (
@@ -418,6 +465,61 @@ export default function Schedule() {
           })}
         </ul>
       </div>
+      </div>{/* close main column */}
+
+      <aside className="card p-4 space-y-3">
+        <p className="field-label">All reminders</p>
+        {active.length === 0 && <p className="text-xs text-foam-dim/60">Nothing scheduled yet.</p>}
+        <ul className="space-y-1.5">
+          {activeWithEffective
+            .filter((x): x is { task: ScheduleTask; effective: string } => x.effective !== null)
+            .sort((a, b) => a.effective.localeCompare(b.effective))
+            .map(({ task, effective }) => {
+              const due = formatDue(effective);
+              return (
+                <li key={task.id}>
+                  <button
+                    onClick={() => jumpTo(effective)}
+                    className="w-full text-left rounded-md border border-moss/15 hover:border-moss/40 bg-deepwater-2/50 p-2 transition-colors"
+                  >
+                    <p className="text-xs text-foam truncate">{task.label}</p>
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      <span className={`pill text-[10px] py-0.5 px-1.5 ${TONE_CLASSES[due.tone]}`}>
+                        {due.label}
+                      </span>
+                      {task.recurrenceDays && (
+                        <span className="pill text-[10px] py-0.5 px-1.5 bg-moss/15 text-foam-dim">
+                          ↻ every {task.recurrenceDays}d
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+        </ul>
+
+        {needsNewDate.length > 0 && (
+          <div className="pt-3 border-t border-amber/20 space-y-2">
+            <p className="text-[11px] font-mono uppercase tracking-wide text-amber">
+              ⚠ Needs a new date
+            </p>
+            {needsNewDate.map((task) => (
+              <button
+                key={task.id}
+                onClick={() => jumpTo(task.dueDate)}
+                className="w-full text-left rounded-md border border-amber/30 bg-amber/5 p-2 hover:border-amber/50 transition-colors"
+              >
+                <p className="text-xs text-foam truncate">{task.label}</p>
+                <p className="text-[10px] text-amber/80 mt-0.5">
+                  Dated before the tank's own start — tap to jump there and pick a real date.
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </aside>
+      </div>{/* close grid */}
 
       {finished.length > 0 && (
         <div className="pt-4 border-t border-moss/15">

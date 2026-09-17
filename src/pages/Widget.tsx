@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { tankLifetimeDuration } from '../lib/duration';
-import { pickMostRelevantTask, formatDue, daysUntil, TONE_CLASSES } from '../lib/schedule';
+import { pickMostRelevantTask, formatDue, daysUntil, effectiveDueDate, TONE_CLASSES } from '../lib/schedule';
 import { parseBackupJson } from '../lib/storage';
 import type { Tank } from '../types';
 import Waterline from '../components/Waterline';
@@ -160,20 +160,25 @@ function WidgetContent({ overrideTank }: { overrideTank?: Tank | null }) {
     }
 
     const lifetime = tankLifetimeDuration(activeTank);
-    const task = pickMostRelevantTask(activeTank.schedule);
-    const due = task ? formatDue(task.dueDate) : undefined;
+    const task = pickMostRelevantTask(activeTank.schedule, activeTank.startDate);
+    // pickMostRelevantTask already selects using the corrected date, but
+    // still returns the real task object with its raw (possibly
+    // pre-startDate) dueDate — the display below has to go through the
+    // same correction too, or a recurring task picked because its true
+    // next occurrence is honest would still show its old, stale raw date.
+    const effective = task ? effectiveDueDate(task, activeTank.startDate) : null;
+    const due = effective ? formatDue(effective) : undefined;
     // formatDue's overdue/today/soon labels already say how far away
-    // something is ("3d overdue", "In 2d"). Its "later" label doesn't —
-    // just a bare month/day with no year and no relative sense of
-    // distance, which is exactly what caused real confusion earlier with
+    // something is ("3d overdue", "In 2d"). Its "later" label used to be
+    // a bare month/day with no year, which caused real confusion with
     // this same tank's actual data (a task genuinely due over a year out
-    // read as "already passed" at a glance). Appended here, specific to
-    // the widget, rather than changed in formatDue itself — Schedule.tsx's
-    // calendar view already gives a "later" date real context (you're
-    // looking at the month it's in), so it doesn't have the same ambiguity
-    // a small, context-free glance card does.
-    const dueLabel =
-        task && due && due.tone === 'later' ? `${due.label} (in ${daysUntil(task.dueDate)}d)` : due?.label;
+    // read as "already passed" at a glance) — fixed at the source in
+    // schedule.ts now, once a second consumer (Schedule's own aside) hit
+    // the identical issue. This addition stays anyway: it's a
+    // complementary axis (how far, not which year), and still earns its
+    // keep specifically for a small, context-free glance card like this
+    // one, even now that the year ambiguity itself is gone.
+    const dueLabel = effective && due && due.tone === 'later' ? `${due.label} (in ${daysUntil(effective)}d)` : due?.label;
     const lastLog = activeTank.logs.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
 
     return (
