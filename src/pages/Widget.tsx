@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { tankLifetimeDuration } from '../lib/duration';
-import { pickMostRelevantTask, formatDue, daysUntil, effectiveDueDate, TONE_CLASSES } from '../lib/schedule';
+import { pickMostRelevantTask, formatDue, daysUntil, effectiveDueDate, scheduleAnchorDate, TONE_CLASSES } from '../lib/schedule';
 import { parseBackupJson } from '../lib/storage';
 import type { Tank } from '../types';
 import Waterline from '../components/Waterline';
@@ -160,13 +160,16 @@ function WidgetContent({ overrideTank }: { overrideTank?: Tank | null }) {
     }
 
     const lifetime = tankLifetimeDuration(activeTank);
-    const task = pickMostRelevantTask(activeTank.schedule, activeTank.startDate);
+    // A "Built" milestone's date when one exists, activeTank.startDate
+    // otherwise — see scheduleAnchorDate's own comment in schedule.ts.
+    const anchorDate = scheduleAnchorDate(activeTank);
+    const task = pickMostRelevantTask(activeTank.schedule, anchorDate);
     // pickMostRelevantTask already selects using the corrected date, but
     // still returns the real task object with its raw (possibly
-    // pre-startDate) dueDate — the display below has to go through the
+    // pre-anchor) dueDate — the display below has to go through the
     // same correction too, or a recurring task picked because its true
     // next occurrence is honest would still show its old, stale raw date.
-    const effective = task ? effectiveDueDate(task, activeTank.startDate) : null;
+    const effective = task ? effectiveDueDate(task, anchorDate) : null;
     const due = effective ? formatDue(effective) : undefined;
     // formatDue's overdue/today/soon labels already say how far away
     // something is ("3d overdue", "In 2d"). Its "later" label used to be

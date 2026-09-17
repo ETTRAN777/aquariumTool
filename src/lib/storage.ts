@@ -486,6 +486,15 @@ function normalizeMilestone(
   // become a true `undefined` rather than staying a broken-but-truthy
   // string.
 
+  let tankBuilt = raw.tankBuilt === true ? true : undefined;
+  if (raw.tankBuilt !== undefined && tankBuilt === undefined) {
+    warnings.push(`${contextLabel}'s tankBuilt flag was an unexpected type in the import — dropped.`);
+  }
+  // "At most one per tank" is enforced back in normalizeTank, same as the
+  // linkedLogEntryId dangling-reference check above — this function only
+  // ever sees one milestone at a time, so it can't know whether another
+  // one in the same import also claims tankBuilt.
+
   const milestone: Milestone = {
     id,
     title,
@@ -496,6 +505,7 @@ function normalizeMilestone(
     ...(major !== undefined ? { major } : {}),
     ...(relatedRosterItemIds !== undefined ? { relatedRosterItemIds } : {}),
     ...(linkedLogEntryId !== undefined ? { linkedLogEntryId } : {}),
+    ...(tankBuilt !== undefined ? { tankBuilt } : {}),
   };
 
   return { milestone, warnings };
@@ -743,6 +753,26 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
     warnings.push(...mWarnings);
     return milestone;
   });
+
+  // At most one tankBuilt milestone per tank, ever — see the field's own
+  // comment in types/index.ts for why. This function can only enforce it
+  // within one import (no visibility into a tank that already existed
+  // before this import), but that's the same limitation every other
+  // per-import invariant here has. Keeps the earliest by date, not just
+  // whichever happened to be first in the array — the real, permanent
+  // build moment is the historically-first one, not an arbitrary one.
+  const builtMilestones = milestones.filter((m) => m.tankBuilt);
+  if (builtMilestones.length > 1) {
+    const keep = builtMilestones.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
+    for (const m of builtMilestones) {
+      if (m.id !== keep.id) {
+        warnings.push(
+          `"${name}" had more than one milestone marked as the tank's build moment — kept the earliest (${keep.date}), the rest now stand as ordinary milestones.`
+        );
+        delete m.tankBuilt;
+      }
+    }
+  }
 
   // --- Schedule ---
   const scheduleSeenIds = new Set<string>();

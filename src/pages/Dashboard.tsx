@@ -6,7 +6,7 @@ import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS } from '../lib/constants
 import { currentPhase, tankPhaseDuration, formatTankAge } from '../lib/duration';
 import { buildConceptImagePromptSimple, buildConceptImagePromptDetailed } from '../lib/conceptImage';
 import { buildPlanSummary } from '../lib/planSummary';
-import { effectiveDueDate } from '../lib/schedule';
+import { effectiveDueDate, scheduleAnchorDate } from '../lib/schedule';
 import type { CustomFieldValue } from '../types';
 
 // Compact relative phrasing for the Dashboard's "last milestone" glance —
@@ -89,11 +89,14 @@ export default function Dashboard() {
   // used to just compare t.dueDate <= today, the exact same bug already
   // found and fixed in Schedule.tsx/Widget.tsx, just a third,
   // previously-unnoticed place it was also happening). Tasks with no
-  // real effective date yet (a one-off dated before startDate, waiting
-  // on a manual re-date) are excluded here too, not counted as due.
+  // real effective date yet (a one-off dated before the tank's anchor,
+  // waiting on a manual re-date) are excluded here too, not counted as
+  // due. Anchor is a "Built" milestone's date when one exists,
+  // activeTank.startDate otherwise — see scheduleAnchorDate in schedule.ts.
+  const anchorDate = scheduleAnchorDate(activeTank);
   const dueCount = schedule.filter((t) => {
     if (t.done) return false;
-    const effective = effectiveDueDate(t, activeTank.startDate);
+    const effective = effectiveDueDate(t, anchorDate);
     return effective !== null && effective <= today;
   }).length;
 

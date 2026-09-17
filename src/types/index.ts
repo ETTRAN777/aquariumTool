@@ -138,6 +138,18 @@ export interface Milestone {
   // otherwise. See detectPhaseChangeMilestone/detectRosterAdditionMilestones
   // in lib/milestones.ts for the exact rules.
   major?: boolean;
+  // Marks the one, permanent "tank came into physical existence" moment —
+  // not a phase (phase-change already covers phase transitions like
+  // entering 'cycling'; this is a separate, one-time historical fact,
+  // not a repeatable state). At most one per tank, ever: a later teardown
+  // and rebuild resets the *phase* (back to 'cycling'), never this flag —
+  // the tank already existed once, and that fact doesn't un-happen.
+  // Dedicated boolean rather than matching on title text on purpose, same
+  // reasoning as mouthSizeMm/adultSizeIn living as real fields instead of
+  // generic traits: a title-text match silently breaks the moment someone
+  // renames the milestone, a structural flag can't. See
+  // milestones.ts's builtMilestone() for the single place this gets read.
+  tankBuilt?: true;
 }
 
 export interface ChecklistTask {

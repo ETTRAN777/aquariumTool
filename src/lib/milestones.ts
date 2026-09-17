@@ -192,3 +192,16 @@ export function recomputeAutoMilestones(tank: Tank): Milestone[] {
 
   return [...manual, ...auto];
 }
+
+// ---------------------------------------------------------------------
+// Tank-built lookup
+// ---------------------------------------------------------------------
+
+// The single place this ever gets read — see tankBuilt's own comment on
+// the Milestone type for why it's a dedicated flag rather than a title
+// match, and storage.ts's normalizeTank for how "at most one" gets
+// enforced on the way in. Anything that needs to know whether a tank has
+// a real build moment recorded calls this, not its own re-derived check.
+export function builtMilestone(tank: Tank): Milestone | undefined {
+  return tank.milestones.find((m) => m.tankBuilt);
+}

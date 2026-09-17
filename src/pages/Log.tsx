@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useData } from '../lib/DataContext';
-import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue, RosterItem, RosterLink } from '../types';
+import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue, RosterItem, RosterLink, Milestone } from '../types';
 import { resizeImageToBase64 } from '../lib/storage';
 import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS, STATUS_LABELS } from '../lib/constants';
+import { builtMilestone } from '../lib/milestones';
 import ConfirmModal from '../components/ConfirmModal';
 import Toast from '../components/Toast';
 import RosterHighlightPicker from '../components/RosterHighlightPicker';
 
 export default function Log() {
-  const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry } = useData();
+  const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry, addMilestone, deleteMilestone } = useData();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -16,6 +17,36 @@ export default function Log() {
 
   if (!activeTank) return null;
   const customFields = activeTank.customFields;
+  // The id of whichever entry currently owns the Built milestone, if
+  // any — threaded to both EntryForm invocations below so each one can
+  // tell "I already own this," "someone else owns this," or "nobody
+  // does yet" apart, rather than just a flat yes/no.
+  const builtByEntryId = builtMilestone(activeTank)?.linkedLogEntryId;
+
+  // Shared by both EntryForm invocations below — the actual Milestone
+  // creation lives here, not inside EntryForm, which has no reason to
+  // know what a Milestone even is beyond reporting the intent back up.
+  function markTankBuilt(entry: LogEntry) {
+    const milestone: Milestone = {
+      id: crypto.randomUUID(),
+      title: 'Built',
+      date: entry.date,
+      type: 'phase-change',
+      major: true,
+      tankBuilt: true,
+      linkedLogEntryId: entry.id,
+    };
+    addMilestone(milestone);
+  }
+
+  // The reverse — called when Built gets unchecked on the entry that
+  // actually owns it. Looks the milestone up fresh rather than trusting
+  // a stale id from closure, same defensiveness as every other delete
+  // path in this app.
+  function unmarkTankBuilt() {
+    const bm = builtMilestone(activeTank!);
+    if (bm) deleteMilestone(bm.id);
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -41,10 +72,13 @@ export default function Log() {
           customFields={customFields}
           waterType={activeTank.waterType}
           roster={activeTank.roster}
+          builtByEntryId={builtByEntryId}
           onSubmit={(entry) => {
             addLogEntry(entry);
             setShowForm(false);
           }}
+          onMarkBuilt={markTankBuilt}
+          onUnmarkBuilt={unmarkTankBuilt}
           onCancel={() => setShowForm(false)}
           submitLabel="Publish entry"
         />
@@ -59,10 +93,13 @@ export default function Log() {
               customFields={customFields}
               waterType={activeTank.waterType}
               roster={activeTank.roster}
+              builtByEntryId={builtByEntryId}
               onSubmit={(updated) => {
                 updateLogEntry({ ...updated, id: entry.id, date: entry.date, weekLabel: entry.weekLabel });
                 setEditingId(null);
               }}
+              onMarkBuilt={markTankBuilt}
+              onUnmarkBuilt={unmarkTankBuilt}
               onCancel={() => setEditingId(null)}
               submitLabel="Save changes"
               editing
@@ -70,7 +107,9 @@ export default function Log() {
           ) : (
             <article
               key={entry.id}
-              className="card overflow-hidden hover:border-amber/30 transition-colors"
+              className={`card overflow-hidden hover:border-amber/30 transition-colors ${
+                entry.id === builtByEntryId ? 'border-amber/50 bg-amber/[0.03]' : ''
+              }`}
             >
               <button
                 onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
@@ -80,6 +119,9 @@ export default function Log() {
                   <p className="font-mono text-xs text-sand uppercase tracking-wide">
                     {entry.weekLabel} · {new Date(entry.date).toLocaleDateString()}
                     {entry.mood && <span className="ml-2">{MOOD_LABELS[entry.mood]}</span>}
+                    {entry.id === builtByEntryId && (
+                      <span className="ml-2 text-amber font-semibold">🌊 Built</span>
+                    )}
                     {entry.phase && (
                       <span className="ml-2 text-amber">🧭 {LOG_PHASE_LABELS[entry.phase]}</span>
                     )}
@@ -283,7 +325,10 @@ function EntryForm({
   customFields,
   waterType,
   roster,
+  builtByEntryId,
   onSubmit,
+  onMarkBuilt,
+  onUnmarkBuilt,
   onCancel,
   submitLabel,
   editing = false,
@@ -293,7 +338,22 @@ function EntryForm({
   customFields: CustomFieldDef[];
   waterType: 'freshwater' | 'saltwater';
   roster: RosterItem[];
+  // The id of whichever log entry currently owns the tank's "Built"
+  // milestone, if one exists — undefined if nothing's been marked yet.
+  // Computed by the parent (builtMilestone(activeTank)?.linkedLogEntryId),
+  // not re-derived here. Comparing against initial?.id below is what
+  // lets the entry that actually owns it stay editable/uncheckable,
+  // while every other entry sees it as already-taken.
+  builtByEntryId: string | undefined;
   onSubmit: (entry: LogEntry) => void;
+  // Called with the just-submitted entry, in addition to onSubmit, only
+  // when Built was newly checked (wasn't the owner before, is now) — the
+  // parent is what actually knows how to create a Milestone; this
+  // component just reports the intent.
+  onMarkBuilt?: (entry: LogEntry) => void;
+  // Called instead, with nothing, when Built was newly UNchecked on the
+  // entry that actually owned it — the parent deletes the milestone.
+  onUnmarkBuilt?: () => void;
   onCancel: () => void;
   submitLabel: string;
   editing?: boolean;
@@ -303,6 +363,16 @@ function EntryForm({
   const [body, setBody] = useState(initial?.body ?? '');
   const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood);
   const [phase, setPhase] = useState<LogEntry['phase']>(initial?.phase);
+  // Is THIS entry the one that already owns the tank's Built milestone —
+  // stays true through edits of the owning entry (checkbox starts
+  // checked, and stays interactive so it can be unchecked to remove the
+  // record), false for a brand-new entry (can't already own something
+  // that doesn't exist yet).
+  const isBuiltOwner = initial?.id !== undefined && initial.id === builtByEntryId;
+  // Built exists, but on a different entry — this one can't touch it at
+  // all until it's removed from wherever it actually lives.
+  const builtElsewhere = builtByEntryId !== undefined && !isBuiltOwner;
+  const [markBuilt, setMarkBuilt] = useState(isBuiltOwner);
   const [additions, setAdditions] = useState<RosterLink[]>(initial?.additions ?? []);
   const [highlightedRosterItemIds, setHighlightedRosterItemIds] = useState<string[]>(
     initial?.highlightedRosterItemIds ?? []
@@ -348,7 +418,7 @@ function EntryForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
-    onSubmit({
+    const entry: LogEntry = {
       id: initial?.id ?? crypto.randomUUID(),
       weekLabel: entryLabel.trim() || `Entry ${weekNumber}`,
       date: initial?.date ?? new Date().toISOString(),
@@ -361,7 +431,13 @@ function EntryForm({
       params,
       customValues: Object.keys(customValues).length ? customValues : undefined,
       photoUrls: photos.length ? photos : undefined,
-    });
+    };
+    onSubmit(entry);
+    // Compares against the ORIGINAL owned-or-not state, not just the
+    // current checkbox value — markBuilt alone can't tell "newly checked"
+    // from "already was the owner," and those need opposite actions.
+    if (markBuilt && !isBuiltOwner) onMarkBuilt?.(entry);
+    else if (!markBuilt && isBuiltOwner) onUnmarkBuilt?.();
   }
 
   function setParam(key: keyof WaterParams, value: string) {
@@ -417,7 +493,9 @@ function EntryForm({
         <p className="field-label">Build stage (optional)</p>
         <p className="text-[11px] text-foam-dim/60 -mt-1 mb-2">
           A separate axis from mood — where the build actually is, not how it feels. Leave unset
-          unless this entry marks a real stage transition.
+          unless this entry marks a real stage transition. 🌊 Built is a different kind of thing
+          sharing this row — not a phase (Cycling already names a real, distinct one), a separate,
+          one-time historical fact that can stand alone or sit alongside whichever phase you pick.
         </p>
         <div className="flex gap-2 flex-wrap">
           {LOG_PHASE_ORDER.map((p) => (
@@ -434,7 +512,39 @@ function EntryForm({
               {LOG_PHASE_LABELS[p]}
             </button>
           ))}
+          {/* Same base pill styling as the six phases on purpose — no
+              distinct visual treatment, the label text alone ("🌊 Built")
+              is what identifies it as a different kind of thing, same as
+              how each phase is identified by its own label. Disabled
+              state is the one real departure: greyed and unclickable
+              rather than vanishing, so the row never shifts once a Built
+              milestone exists elsewhere — undoing/moving it happens on
+              whichever entry currently owns it, not here. */}
+          <button
+            type="button"
+            disabled={builtElsewhere}
+            onClick={() => !builtElsewhere && setMarkBuilt((v) => !v)}
+            className={`pill py-1.5 px-3 ${
+              builtElsewhere
+                ? 'bg-deepwater-2 text-foam-dim/40 border border-moss/15 cursor-not-allowed'
+                : markBuilt
+                  ? 'bg-amber text-deepwater'
+                  : 'bg-deepwater-2 text-foam-dim border border-moss/30'
+            }`}
+          >
+            🌊 Built
+          </button>
         </div>
+        {markBuilt && (
+          <p className="text-[11px] text-amber/80 mt-2">
+            You can still choose a build stage above, too — Built isn't one of the six phases.
+          </p>
+        )}
+        {builtElsewhere && (
+          <p className="text-[11px] text-foam-dim/60 mt-2">
+            Already marked on a different entry — remove it there first to move it here.
+          </p>
+        )}
       </div>
 
       <div>

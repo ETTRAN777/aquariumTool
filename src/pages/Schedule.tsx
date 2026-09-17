@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
-import { daysUntil, formatDue, effectiveDueDate, TONE_CLASSES } from '../lib/schedule';
+import { daysUntil, formatDue, effectiveDueDate, scheduleAnchorDate, TONE_CLASSES } from '../lib/schedule';
 import type { ScheduleTask } from '../types';
 import Toast from '../components/Toast';
 
@@ -62,7 +62,7 @@ function occurrencesInRange(
   schedule: ScheduleTask[],
   rangeStart: string,
   rangeEnd: string,
-  startDate: string | undefined
+  anchorDate: string | undefined
 ): CalendarOccurrence[] {
   const occurrences: CalendarOccurrence[] = [];
   for (const t of schedule) {
@@ -74,7 +74,7 @@ function occurrencesInRange(
     // needing a new date, but still has to be reachable through the
     // normal calendar/day-agenda flow — that's exactly how the aside
     // now navigates to it, rather than a second, separate edit surface.
-    const effective = effectiveDueDate(t, startDate) ?? t.dueDate;
+    const effective = effectiveDueDate(t, anchorDate) ?? t.dueDate;
     const cap = t.endDate && t.endDate < rangeEnd ? t.endDate : rangeEnd;
     if (effective >= rangeStart && effective <= rangeEnd && (!t.endDate || effective <= t.endDate)) {
       occurrences.push({ task: t, date: effective, actual: true });
@@ -107,6 +107,11 @@ export default function Schedule() {
   if (!activeTank) return null;
   const tank = activeTank;
   const { schedule } = tank;
+  // Computed once, reused everywhere below — a "Built" milestone's date
+  // when one exists, tank.startDate otherwise. See scheduleAnchorDate's
+  // own comment in schedule.ts for why this isn't just tank.startDate
+  // directly anymore.
+  const anchorDate = scheduleAnchorDate(tank);
 
   function handleComplete(task: ScheduleTask) {
     const today = todayIso();
@@ -124,7 +129,7 @@ export default function Schedule() {
   // Every active task's corrected date, computed once here and reused by
   // the overdue banner, the calendar, and the aside below — never each
   // one computing its own copy that could quietly drift from the others.
-  const activeWithEffective = active.map((t) => ({ task: t, effective: effectiveDueDate(t, tank.startDate) }));
+  const activeWithEffective = active.map((t) => ({ task: t, effective: effectiveDueDate(t, anchorDate) }));
   // One-off tasks dated before the tank's own start, with no honest date
   // to compute — see effectiveDueDate's own comment for why these are
   // deliberately not auto-placed. Surfaced only in the aside.
@@ -139,13 +144,13 @@ export default function Schedule() {
 
   const occurrencesByDate = useMemo(() => {
     const map = new Map<string, CalendarOccurrence[]>();
-    for (const occ of occurrencesInRange(active, gridStart, gridEnd, tank.startDate)) {
+    for (const occ of occurrencesInRange(active, gridStart, gridEnd, anchorDate)) {
       const list = map.get(occ.date) ?? [];
       list.push(occ);
       map.set(occ.date, list);
     }
     return map;
-  }, [active, gridStart, gridEnd, tank.startDate]);
+  }, [active, gridStart, gridEnd, anchorDate]);
 
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, {
     month: 'long',
@@ -377,7 +382,7 @@ export default function Schedule() {
                       // task.dueDate directly — this preview is a future
                       // instance beyond that one, and the caption is
                       // specifically about when the actionable one lands.
-                      const actualDue = effectiveDueDate(task, tank.startDate)!;
+                      const actualDue = effectiveDueDate(task, anchorDate)!;
                       const due = formatDue(actualDue);
                       return due.tone === 'later' ? parseIsoDate(actualDue).toLocaleDateString() : due.label.toLowerCase();
                     })()}
