@@ -600,8 +600,8 @@ export default function Targets() {
                       {(item.traits ?? []).length > 0 && (
                         <div className="space-y-2 mb-3">
                           {item.traits!.map((trait) => (
-                            <div key={trait.id} className="flex items-start gap-2">
-                              <span className="text-xs text-foam-dim w-36 shrink-0 truncate pt-1.5">
+                            <div key={trait.id} className="flex items-center gap-2">
+                              <span className="text-xs text-foam-dim w-36 shrink-0 truncate">
                                 {trait.label}
                               </span>
                               <TraitInput
@@ -610,7 +610,7 @@ export default function Targets() {
                               />
                               <button
                                 onClick={() => removeTrait(item, trait.id)}
-                                className="btn-icon danger text-xs shrink-0 mt-1"
+                                className="btn-icon danger text-xs shrink-0"
                                 aria-label="Remove trait"
                               >
                                 ✕

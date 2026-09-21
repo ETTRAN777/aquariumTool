@@ -664,15 +664,58 @@ function CustomFieldInput({
   onChange: (v: CustomFieldValue | undefined) => void;
 }) {
   if (field.type === 'boolean') {
+    // Matches Compatibility's TraitInput pill styling exactly (moss for
+    // Yes, coral for No, same border/bg classes) plus a separate ✕ — not
+    // the click-active-to-clear pattern used elsewhere in this app, to
+    // stay visually consistent with the already-existing pattern this
+    // was asked to match. One real difference underneath, though:
+    // Compatibility's ✕ removes the whole trait (an optional add-on);
+    // this field is a persistent, tank-level definition, so ✕ here only
+    // clears THIS entry's value back to unset, never the field itself —
+    // same visual shape, different operation, on purpose.
     return (
-      <label className="flex items-center gap-2 text-xs text-foam-dim bg-deepwater-2 border border-moss/30 rounded-md px-3 py-2">
-        <input
-          type="checkbox"
-          checked={value === true}
-          onChange={(e) => onChange(e.target.checked)}
-        />
-        {field.label}
-      </label>
+      <div>
+        <p className="text-[10px] text-foam-dim font-mono uppercase tracking-wide">
+          {field.label}
+        </p>
+        {/* The .field class itself, not a hand-tuned height — gives this
+            the exact same box (padding, border, width) as the number/text
+            inputs beside it, so the grid row lines up for real rather
+            than approximately. The buttons inside keep their own styling
+            unchanged; only the wrapper is new. */}
+        <div className="field mt-0.5 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(true)}
+            className={`text-xs rounded px-2 py-1 border ${
+              value === true
+                ? 'border-moss bg-moss/20 text-foam'
+                : 'border-moss/30 text-foam-dim hover:border-moss/60'
+            }`}
+          >
+            Yes
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange(false)}
+            className={`text-xs rounded px-2 py-1 border ${
+              value === false
+                ? 'border-coral bg-coral/20 text-foam'
+                : 'border-moss/30 text-foam-dim hover:border-moss/60'
+            }`}
+          >
+            No
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange(undefined)}
+            className="btn-icon danger text-xs"
+            aria-label="Clear"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
     );
   }
 
