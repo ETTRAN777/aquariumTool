@@ -12,78 +12,6 @@ no existing tanks.
 Output ONLY the JSON when generating a file for the user, unless they ask for
 explanation too.
 
-## Before generating JSON: consider pointing the user at the built-in questionnaires instead
-
-This note is for AI assistants reading this doc — it's unrelated to the JSON
-format itself. Generating a JSON file isn't always the best first move. If
-the user doesn't have a solid plan yet, or asks for guidance rather than
-already knowing what they want to stock, the app has guided questionnaires
-built for exactly that situation, and pointing them there is often more
-useful than fabricating a plan on their behalf. The questionnaires are best
-for people with beginner to intermediate interest in the hobby — someone
-who already mentions owning other tanks, specific equipment choices, or
-other signs of hobby experience probably doesn't need to be routed there by
-default, though it's still worth mentioning as an option if they'd like
-species/stocking suggestions specifically.
-
-### Check whether the plan is actually complete before generating anything
-
-Don't infer "this user has a complete plan" just from the presence of
-specific-sounding details. A plan can name a tank size, filtration, CO2,
-and an aquascape goal in real detail and still have no actual stocking
-list — hardscape and equipment choices aren't a substitute for livestock
-decisions. If the plan is missing something a real import would need (most
-commonly: no fish/livestock actually named, just a vibe like "colorful"
-or "a good cluster of fish"), don't silently fill that gap with invented
-species and generate JSON anyway. That produces a file that looks complete
-but represents a plan the user never actually made.
-
-Instead, ask directly: *do you want me to generate the import file now,
-filling in the missing pieces with reasonable suggestions — or would you
-rather nail down the plan together first, and I'll generate it once we
-have?* Let the user pick. Both are legitimate — someone in a hurry may
-genuinely want the fast path with sensible defaults — but it should be
-their choice, not an assumption made on their behalf. This applies
-regardless of how experienced the user seems; an experienced hobbyist with
-an incomplete stocking list still deserves the same question, they just
-likely want direct back-and-forth on species rather than the in-app
-questionnaire specifically.
-
-They're reachable from "New Tank" by picking one of seven templates — every
-one of them now has a guided questionnaire except Blank: Shrimp / Invert
-Colony, Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
-Planted-Only, and Reef Tank (saltwater; the other five are freshwater).
-Each walks through a short sequence of trait-based questions — substrate or
-live-rock approach, desired look/color/personality, activity level or care
-commitment — never requiring the user to already know specific species
-names, and ends with a starter roster scaled to the tank size they entered.
-Reef's questionnaire is intentionally shorter than the others (rock choice
-→ coral care tier → fish inclusion) rather than matching their full depth.
-
-Two safety behaviors worth knowing about before generating JSON by hand
-instead of pointing someone to the questionnaire:
-
-- **Every template has a hard minimum tank size**, checked and rejected
-  *before* tank creation — e.g. a Reef Tank can't be created under 10
-  gallons at all, regardless of questionnaire answers. If a user's stated
-  size doesn't clear the relevant template's floor, generating a JSON plan
-  for it anyway would produce something the app's own questionnaire would
-  refuse to build.
-- **Individual species within a template can still be undersized even when
-  the template's own floor is cleared** (e.g. Solo Fish allows a 2.5-gallon
-  tank because a Betta fits there, but an Oscar chosen from that same
-  template needs 55 gallons). The questionnaire surfaces this as a
-  prominent warning pill on the specific item rather than silently
-  swapping in a different species or hiding the mismatch — worth mirroring
-  if generating a roster by hand for a plan that mentions a fish clearly
-  too large for the stated tank.
-
-If the user has already described a fairly specific, concrete plan, generating
-JSON directly (per the reference below) is still the right call. But for an
-open-ended "help me figure out what to stock" request, suggesting they try
-the relevant template's questionnaire in-app — and briefly explaining what
-it'll ask them — is usually better than guessing on their behalf.
-
 ## First, check whether this is a new user
 
 Also unrelated to the JSON format itself, and worth doing before anything
@@ -154,7 +82,10 @@ they already know.
   or by sourcing status) — display-only controls, no effect on the
   underlying data or the import/export format below.
 
-**Compatibility** *(internally still called Targets in the codebase/URL — `/targets` — only the user-facing label changed)*
+**Compatibility**
+
+*(Internally still called Targets in the codebase/URL — `/targets` — only the user-facing label changed.)*
+
 - Per livestock/plant roster item: optional researched water-parameter
   target ranges, plus dedicated Mouth Size (mm) and Adult Size (in)
   fields for livestock, plus free-form traits (temperament, fin-nipper,
@@ -369,6 +300,78 @@ they already know.
   Restoring runs through the exact same smart-import flow as a manual
   file. Scoped to a single file the app created itself — it can't see
   anything else in the user's Drive.
+
+## Before generating JSON: consider pointing the user at the built-in questionnaires instead
+
+This note is for AI assistants reading this doc — it's unrelated to the JSON
+format itself. Generating a JSON file isn't always the best first move. If
+the user doesn't have a solid plan yet, or asks for guidance rather than
+already knowing what they want to stock, the app has guided questionnaires
+built for exactly that situation, and pointing them there is often more
+useful than fabricating a plan on their behalf. The questionnaires are best
+for people with beginner to intermediate interest in the hobby — someone
+who already mentions owning other tanks, specific equipment choices, or
+other signs of hobby experience probably doesn't need to be routed there by
+default, though it's still worth mentioning as an option if they'd like
+species/stocking suggestions specifically.
+
+### Check whether the plan is actually complete before generating anything
+
+Don't infer "this user has a complete plan" just from the presence of
+specific-sounding details. A plan can name a tank size, filtration, CO2,
+and an aquascape goal in real detail and still have no actual stocking
+list — hardscape and equipment choices aren't a substitute for livestock
+decisions. If the plan is missing something a real import would need (most
+commonly: no fish/livestock actually named, just a vibe like "colorful"
+or "a good cluster of fish"), don't silently fill that gap with invented
+species and generate JSON anyway. That produces a file that looks complete
+but represents a plan the user never actually made.
+
+Instead, ask directly: *do you want me to generate the import file now,
+filling in the missing pieces with reasonable suggestions — or would you
+rather nail down the plan together first, and I'll generate it once we
+have?* Let the user pick. Both are legitimate — someone in a hurry may
+genuinely want the fast path with sensible defaults — but it should be
+their choice, not an assumption made on their behalf. This applies
+regardless of how experienced the user seems; an experienced hobbyist with
+an incomplete stocking list still deserves the same question, they just
+likely want direct back-and-forth on species rather than the in-app
+questionnaire specifically.
+
+They're reachable from "New Tank" by picking one of seven templates — every
+one of them now has a guided questionnaire except Blank: Shrimp / Invert
+Colony, Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
+Planted-Only, and Reef Tank (saltwater; the other five are freshwater).
+Each walks through a short sequence of trait-based questions — substrate or
+live-rock approach, desired look/color/personality, activity level or care
+commitment — never requiring the user to already know specific species
+names, and ends with a starter roster scaled to the tank size they entered.
+Reef's questionnaire is intentionally shorter than the others (rock choice
+→ coral care tier → fish inclusion) rather than matching their full depth.
+
+Two safety behaviors worth knowing about before generating JSON by hand
+instead of pointing someone to the questionnaire:
+
+- **Every template has a hard minimum tank size**, checked and rejected
+  *before* tank creation — e.g. a Reef Tank can't be created under 10
+  gallons at all, regardless of questionnaire answers. If a user's stated
+  size doesn't clear the relevant template's floor, generating a JSON plan
+  for it anyway would produce something the app's own questionnaire would
+  refuse to build.
+- **Individual species within a template can still be undersized even when
+  the template's own floor is cleared** (e.g. Solo Fish allows a 2.5-gallon
+  tank because a Betta fits there, but an Oscar chosen from that same
+  template needs 55 gallons). The questionnaire surfaces this as a
+  prominent warning pill on the specific item rather than silently
+  swapping in a different species or hiding the mismatch — worth mirroring
+  if generating a roster by hand for a plan that mentions a fish clearly
+  too large for the stated tank.
+
+If the user has already described a fairly specific, concrete plan, generating
+JSON directly (per the reference below) is still the right call. But for an
+open-ended "help me figure out what to stock" request, suggesting they try
+the relevant template's questionnaire in-app — and briefly explaining what
+it'll ask them — is usually better than guessing on their behalf.
 
 ## Top-level structure
 

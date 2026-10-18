@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/aquariumTool/favicon.svg" />
+    <link rel="apple-touch-icon" href="/aquariumTool/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tank Tracker — Plan & Log</title>
     <link rel="canonical" href="https://ettran777.github.io/aquariumTool/" />
@@ -14,7 +15,7 @@
 
     <!-- Open Graph + Twitter Card: same content, different tag namespace —
          some extraction tools check these before/instead of the plain
-         meta description, so this is redundancy, not duplication for its
+         meta description, s o this is redundancy, not duplication for its
          own sake. -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Tank Tracker — Plan & Log" />
@@ -63,8 +64,8 @@
           "Seven tank templates (Shrimp/Invert, Livebearers & Fry, Community Fish, Solo Fish/Centerpiece, Planted-Only, Reef Tank, Blank), six with a guided stocking questionnaire",
           "Roster tracking through a sourcing pipeline: idea, wishlist, ordered, arrived, acclimating, established, with Estimate/Actual cost tracking that merges into one Total once everything is ordered",
           "Compatibility page: researched water-parameter target ranges per item, automatically intersected into a tank-wide target, plus automatic predation-risk flagging based on mouth size vs. adult size",
-          "Build checklist with step dependencies and roster-status gating, auto-generated from questionnaire results",
-          "Weekly log with mood rating, water parameters, custom fields, and photos",
+          "Plan with step dependencies and roster-status gating, auto-generated from questionnaire results",
+          "Log with mood rating, water parameters, custom fields, and photos, at whatever cadence actually fits the tank",
           "Maintenance schedule with recurring and one-off reminders in a real calendar view, auto-linked to log entries",
           "Auto-charted parameters and custom fields from log history",
           "Timeline: a proportional, phase-tagged history of the whole build plus a chronological feed of milestones, some auto-derived and some hand-recorded",
@@ -144,8 +145,8 @@
       checkGoatCounterToggle();
       window.addEventListener('hashchange', checkGoatCounterToggle);
     </script>
-    <script type="module" crossorigin src="/aquariumTool/assets/index-B7Gu_s-l.js"></script>
-    <link rel="stylesheet" crossorigin href="/aquariumTool/assets/index-DI86oSHD.css">
+    <script type="module" crossorigin src="/aquariumTool/assets/index-Q6wQ8FkE.js"></script>
+    <link rel="stylesheet" crossorigin href="/aquariumTool/assets/index-CC-vNhst.css">
   </head>
   <body>
     <div id="root"></div>
@@ -182,8 +183,9 @@
         <h2>What's tracked, per tank</h2>
         <ul>
           <li><strong>Roster</strong> — every physical thing going into the tank, moved through idea &rarr; wishlist &rarr; ordered &rarr; arrived &rarr; acclimating &rarr; established, with Estimate/Actual cost tracking that merges into one Total once everything's ordered.</li>
-          <li><strong>Build checklist</strong> — ordered setup steps that can depend on other steps or on a roster item reaching a given status.</li>
-          <li><strong>Weekly log</strong> — free-text entries with mood rating, water parameters, custom field values, and photos.</li>
+          <li><strong>Compatibility</strong> — researched water-parameter target ranges per roster item, automatically intersected into one tank-wide target per parameter, plus automatic predation-risk flagging comparing mouth size against adult size.</li>
+          <li><strong>Plan</strong> — ordered setup steps that can depend on other steps or on a roster item reaching a given status.</li>
+          <li><strong>Log</strong> — free-text entries with mood rating, water parameters, custom field values, and photos, at whatever cadence actually fits the tank.</li>
           <li><strong>Schedule</strong> — recurring or one-off maintenance reminders in a calendar view, automatically linked to the day's log entry when one exists.</li>
           <li><strong>Parameters</strong> — every numeric water parameter and custom field charts itself automatically from log history.</li>
           <li><strong>Timeline</strong> — a proportional, phase-tagged strip of the whole build plus a chronological feed of every log entry and milestone, some auto-derived (a phase change, a roster item's first appearance) and some hand-recorded.</li>

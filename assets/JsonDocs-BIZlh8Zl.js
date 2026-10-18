@@ -1,4 +1,4 @@
-import{h as e,n as t,p as n,r,s as i,t as a,v as o}from"./index-B7Gu_s-l.js";var s=o(e(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
+import{c as e,g as t,m as n,o as r,r as i,t as a,y as o}from"./index-Q6wQ8FkE.js";var s=o(t(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
 
 This document is written for AI assistants helping someone plan or manage an
 aquarium using this app. It has two jobs: give you real, current context on
@@ -11,78 +11,6 @@ no existing tanks.
 
 Output ONLY the JSON when generating a file for the user, unless they ask for
 explanation too.
-
-## Before generating JSON: consider pointing the user at the built-in questionnaires instead
-
-This note is for AI assistants reading this doc — it's unrelated to the JSON
-format itself. Generating a JSON file isn't always the best first move. If
-the user doesn't have a solid plan yet, or asks for guidance rather than
-already knowing what they want to stock, the app has guided questionnaires
-built for exactly that situation, and pointing them there is often more
-useful than fabricating a plan on their behalf. The questionnaires are best
-for people with beginner to intermediate interest in the hobby — someone
-who already mentions owning other tanks, specific equipment choices, or
-other signs of hobby experience probably doesn't need to be routed there by
-default, though it's still worth mentioning as an option if they'd like
-species/stocking suggestions specifically.
-
-### Check whether the plan is actually complete before generating anything
-
-Don't infer "this user has a complete plan" just from the presence of
-specific-sounding details. A plan can name a tank size, filtration, CO2,
-and an aquascape goal in real detail and still have no actual stocking
-list — hardscape and equipment choices aren't a substitute for livestock
-decisions. If the plan is missing something a real import would need (most
-commonly: no fish/livestock actually named, just a vibe like "colorful"
-or "a good cluster of fish"), don't silently fill that gap with invented
-species and generate JSON anyway. That produces a file that looks complete
-but represents a plan the user never actually made.
-
-Instead, ask directly: *do you want me to generate the import file now,
-filling in the missing pieces with reasonable suggestions — or would you
-rather nail down the plan together first, and I'll generate it once we
-have?* Let the user pick. Both are legitimate — someone in a hurry may
-genuinely want the fast path with sensible defaults — but it should be
-their choice, not an assumption made on their behalf. This applies
-regardless of how experienced the user seems; an experienced hobbyist with
-an incomplete stocking list still deserves the same question, they just
-likely want direct back-and-forth on species rather than the in-app
-questionnaire specifically.
-
-They're reachable from "New Tank" by picking one of seven templates — every
-one of them now has a guided questionnaire except Blank: Shrimp / Invert
-Colony, Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
-Planted-Only, and Reef Tank (saltwater; the other five are freshwater).
-Each walks through a short sequence of trait-based questions — substrate or
-live-rock approach, desired look/color/personality, activity level or care
-commitment — never requiring the user to already know specific species
-names, and ends with a starter roster scaled to the tank size they entered.
-Reef's questionnaire is intentionally shorter than the others (rock choice
-→ coral care tier → fish inclusion) rather than matching their full depth.
-
-Two safety behaviors worth knowing about before generating JSON by hand
-instead of pointing someone to the questionnaire:
-
-- **Every template has a hard minimum tank size**, checked and rejected
-  *before* tank creation — e.g. a Reef Tank can't be created under 10
-  gallons at all, regardless of questionnaire answers. If a user's stated
-  size doesn't clear the relevant template's floor, generating a JSON plan
-  for it anyway would produce something the app's own questionnaire would
-  refuse to build.
-- **Individual species within a template can still be undersized even when
-  the template's own floor is cleared** (e.g. Solo Fish allows a 2.5-gallon
-  tank because a Betta fits there, but an Oscar chosen from that same
-  template needs 55 gallons). The questionnaire surfaces this as a
-  prominent warning pill on the specific item rather than silently
-  swapping in a different species or hiding the mismatch — worth mirroring
-  if generating a roster by hand for a plan that mentions a fish clearly
-  too large for the stated tank.
-
-If the user has already described a fairly specific, concrete plan, generating
-JSON directly (per the reference below) is still the right call. But for an
-open-ended "help me figure out what to stock" request, suggesting they try
-the relevant template's questionnaire in-app — and briefly explaining what
-it'll ask them — is usually better than guessing on their behalf.
 
 ## First, check whether this is a new user
 
@@ -154,7 +82,10 @@ they already know.
   or by sourcing status) — display-only controls, no effect on the
   underlying data or the import/export format below.
 
-**Compatibility** *(internally still called Targets in the codebase/URL — \`/targets\` — only the user-facing label changed)*
+**Compatibility**
+
+*(Internally still called Targets in the codebase/URL — \`/targets\` — only the user-facing label changed.)*
+
 - Per livestock/plant roster item: optional researched water-parameter
   target ranges, plus dedicated Mouth Size (mm) and Adult Size (in)
   fields for livestock, plus free-form traits (temperament, fin-nipper,
@@ -370,6 +301,78 @@ they already know.
   file. Scoped to a single file the app created itself — it can't see
   anything else in the user's Drive.
 
+## Before generating JSON: consider pointing the user at the built-in questionnaires instead
+
+This note is for AI assistants reading this doc — it's unrelated to the JSON
+format itself. Generating a JSON file isn't always the best first move. If
+the user doesn't have a solid plan yet, or asks for guidance rather than
+already knowing what they want to stock, the app has guided questionnaires
+built for exactly that situation, and pointing them there is often more
+useful than fabricating a plan on their behalf. The questionnaires are best
+for people with beginner to intermediate interest in the hobby — someone
+who already mentions owning other tanks, specific equipment choices, or
+other signs of hobby experience probably doesn't need to be routed there by
+default, though it's still worth mentioning as an option if they'd like
+species/stocking suggestions specifically.
+
+### Check whether the plan is actually complete before generating anything
+
+Don't infer "this user has a complete plan" just from the presence of
+specific-sounding details. A plan can name a tank size, filtration, CO2,
+and an aquascape goal in real detail and still have no actual stocking
+list — hardscape and equipment choices aren't a substitute for livestock
+decisions. If the plan is missing something a real import would need (most
+commonly: no fish/livestock actually named, just a vibe like "colorful"
+or "a good cluster of fish"), don't silently fill that gap with invented
+species and generate JSON anyway. That produces a file that looks complete
+but represents a plan the user never actually made.
+
+Instead, ask directly: *do you want me to generate the import file now,
+filling in the missing pieces with reasonable suggestions — or would you
+rather nail down the plan together first, and I'll generate it once we
+have?* Let the user pick. Both are legitimate — someone in a hurry may
+genuinely want the fast path with sensible defaults — but it should be
+their choice, not an assumption made on their behalf. This applies
+regardless of how experienced the user seems; an experienced hobbyist with
+an incomplete stocking list still deserves the same question, they just
+likely want direct back-and-forth on species rather than the in-app
+questionnaire specifically.
+
+They're reachable from "New Tank" by picking one of seven templates — every
+one of them now has a guided questionnaire except Blank: Shrimp / Invert
+Colony, Livebearers & Fry, Community Fish, Solo Fish / Centerpiece,
+Planted-Only, and Reef Tank (saltwater; the other five are freshwater).
+Each walks through a short sequence of trait-based questions — substrate or
+live-rock approach, desired look/color/personality, activity level or care
+commitment — never requiring the user to already know specific species
+names, and ends with a starter roster scaled to the tank size they entered.
+Reef's questionnaire is intentionally shorter than the others (rock choice
+→ coral care tier → fish inclusion) rather than matching their full depth.
+
+Two safety behaviors worth knowing about before generating JSON by hand
+instead of pointing someone to the questionnaire:
+
+- **Every template has a hard minimum tank size**, checked and rejected
+  *before* tank creation — e.g. a Reef Tank can't be created under 10
+  gallons at all, regardless of questionnaire answers. If a user's stated
+  size doesn't clear the relevant template's floor, generating a JSON plan
+  for it anyway would produce something the app's own questionnaire would
+  refuse to build.
+- **Individual species within a template can still be undersized even when
+  the template's own floor is cleared** (e.g. Solo Fish allows a 2.5-gallon
+  tank because a Betta fits there, but an Oscar chosen from that same
+  template needs 55 gallons). The questionnaire surfaces this as a
+  prominent warning pill on the specific item rather than silently
+  swapping in a different species or hiding the mismatch — worth mirroring
+  if generating a roster by hand for a plan that mentions a fish clearly
+  too large for the stated tank.
+
+If the user has already described a fairly specific, concrete plan, generating
+JSON directly (per the reference below) is still the right call. But for an
+open-ended "help me figure out what to stock" request, suggesting they try
+the relevant template's questionnaire in-app — and briefly explaining what
+it'll ask them — is usually better than guessing on their behalf.
+
 ## Top-level structure
 
 The file must be a single JSON object:
@@ -499,7 +502,7 @@ or computed from — just displayed back to the user for reference:
 Reuse these preset labels verbatim when they fit, the same way preset
 custom fields work above:
 
-${r.map(e=>`- ${e.label} (${e.type}, ${e.appliesTo} only)`).join(`
+${i.map(e=>`- ${e.label} (${e.type}, ${e.appliesTo} only)`).join(`
 `)}
 
 Not limited to these — invent new ones using the same three-type system
@@ -682,7 +685,7 @@ A notable, dated moment in the tank's build (e.g. "Cycling complete," "Founding 
   ]
 }
 \`\`\`
-`,l=i(),u={html:d,json:f};function d(e){let t=/(<\/?[a-zA-Z][\w-]*)|([a-zA-Z-]+)(?==)|("(?:[^"\\]|\\.)*")|(\/?>)/g,n=[],r=0,i;for(;i=t.exec(e);)i.index>r&&n.push({text:e.slice(r,i.index),type:`punct`}),i[1]||i[4]?n.push({text:i[1]??i[4],type:`tag`}):i[2]?n.push({text:i[2],type:`attr`}):i[3]&&n.push({text:i[3],type:`string`}),r=t.lastIndex;return r<e.length&&n.push({text:e.slice(r),type:`punct`}),n}function f(e){let t=/("(?:[^"\\]|\\.)*")(?=\s*:)|("(?:[^"\\]|\\.)*")|(-?\d+\.?\d*)|(\btrue\b|\bfalse\b|\bnull\b)|([{}[\],:])/g,n=[],r=0,i;for(;i=t.exec(e);)i.index>r&&n.push({text:e.slice(r,i.index),type:`punct`}),i[1]?n.push({text:i[1],type:`key`}):i[2]?n.push({text:i[2],type:`string`}):i[3]?n.push({text:i[3],type:`number`}):i[4]?n.push({text:i[4],type:`keyword`}):i[5]&&n.push({text:i[5],type:`punct`}),r=t.lastIndex;return r<e.length&&n.push({text:e.slice(r),type:`punct`}),n}var p={tag:`text-amber`,attr:`text-sand`,key:`text-sand`,string:`text-moss-light`,number:`text-amber`,keyword:`text-amber`,punct:`text-foam-dim`};function m({code:e,language:t=`code`}){let[n,r]=(0,s.useState)(!1),i=u[t];function a(){navigator.clipboard.writeText(e).then(()=>{r(!0),setTimeout(()=>r(!1),2e3)}).catch(()=>{})}return(0,l.jsxs)(`div`,{className:`rounded-lg border border-moss/30 overflow-hidden`,children:[(0,l.jsxs)(`div`,{className:`flex items-center justify-between px-3 py-1.5 bg-deepwater-2 border-b border-moss/20`,children:[(0,l.jsx)(`span`,{className:`font-mono text-[10px] uppercase tracking-wide text-foam-dim`,children:t}),(0,l.jsx)(`button`,{onClick:a,className:`font-mono text-[10px] uppercase tracking-wide text-sand hover:text-amber transition-colors`,children:n?`✓ Copied`:`Copy`})]}),(0,l.jsx)(`pre`,{className:`px-3 py-2.5 bg-deepwater m-0 whitespace-pre-wrap break-words`,children:(0,l.jsx)(`code`,{className:`font-mono text-xs leading-relaxed`,children:e.split(`
+`,l=e(),u={html:d,json:f};function d(e){let t=/(<\/?[a-zA-Z][\w-]*)|([a-zA-Z-]+)(?==)|("(?:[^"\\]|\\.)*")|(\/?>)/g,n=[],r=0,i;for(;i=t.exec(e);)i.index>r&&n.push({text:e.slice(r,i.index),type:`punct`}),i[1]||i[4]?n.push({text:i[1]??i[4],type:`tag`}):i[2]?n.push({text:i[2],type:`attr`}):i[3]&&n.push({text:i[3],type:`string`}),r=t.lastIndex;return r<e.length&&n.push({text:e.slice(r),type:`punct`}),n}function f(e){let t=/("(?:[^"\\]|\\.)*")(?=\s*:)|("(?:[^"\\]|\\.)*")|(-?\d+\.?\d*)|(\btrue\b|\bfalse\b|\bnull\b)|([{}[\],:])/g,n=[],r=0,i;for(;i=t.exec(e);)i.index>r&&n.push({text:e.slice(r,i.index),type:`punct`}),i[1]?n.push({text:i[1],type:`key`}):i[2]?n.push({text:i[2],type:`string`}):i[3]?n.push({text:i[3],type:`number`}):i[4]?n.push({text:i[4],type:`keyword`}):i[5]&&n.push({text:i[5],type:`punct`}),r=t.lastIndex;return r<e.length&&n.push({text:e.slice(r),type:`punct`}),n}var p={tag:`text-amber`,attr:`text-sand`,key:`text-sand`,string:`text-moss-light`,number:`text-amber`,keyword:`text-amber`,punct:`text-foam-dim`};function m({code:e,language:t=`code`}){let[n,r]=(0,s.useState)(!1),i=u[t];function a(){navigator.clipboard.writeText(e).then(()=>{r(!0),setTimeout(()=>r(!1),2e3)}).catch(()=>{})}return(0,l.jsxs)(`div`,{className:`rounded-lg border border-moss/30 overflow-hidden`,children:[(0,l.jsxs)(`div`,{className:`flex items-center justify-between px-3 py-1.5 bg-deepwater-2 border-b border-moss/20`,children:[(0,l.jsx)(`span`,{className:`font-mono text-[10px] uppercase tracking-wide text-foam-dim`,children:t}),(0,l.jsx)(`button`,{onClick:a,className:`font-mono text-[10px] uppercase tracking-wide text-sand hover:text-amber transition-colors`,children:n?`✓ Copied`:`Copy`})]}),(0,l.jsx)(`pre`,{className:`px-3 py-2.5 bg-deepwater m-0 whitespace-pre-wrap break-words`,children:(0,l.jsx)(`code`,{className:`font-mono text-xs leading-relaxed`,children:e.split(`
 `).map((e,t)=>(0,l.jsx)(`div`,{className:`pl-[1.5em] indent-[-1.5em]`,children:e===``?`\xA0`:i?i(e).map((e,t)=>(0,l.jsx)(`span`,{className:p[e.type],children:e.text},t)):(0,l.jsx)(`span`,{className:`text-foam-dim`,children:e})},t))})})]})}function h(e){let t=[],n=/```(\w+)\n([\s\S]*?)```/g,r=0,i;for(;i=n.exec(e);)i.index>r&&t.push({type:`prose`,content:e.slice(r,i.index)}),t.push({type:`code`,language:i[1],content:i[2].replace(/\n$/,``)}),r=n.lastIndex;return r<e.length&&t.push({type:`prose`,content:e.slice(r)}),t}function g(e){let t=e.split(`
 `),n=[],r=[],i=0,a=e=>/^\s*\|.*\|\s*$/.test(e),o=e=>/^\s*\|[\s:|-]+\|\s*$/.test(e)&&e.includes(`-`),s=e=>e.trim().replace(/^\|/,``).replace(/\|$/,``).split(/(?<!\\)\|/).map(e=>e.trim().replace(/\\\|/g,`|`)),c=e=>e.match(/^(#{1,3}) (.+)$/),l=e=>e.match(/^(\s*)- (.+)$/),u=e=>e.match(/^\*\*([^*]+)\*\*$/);function d(){r.length>0&&(n.push({type:`text`,content:r.join(`
-`)}),r=[])}for(;i<t.length;){let e=c(t[i]),f=l(t[i]),p=u(t[i]);if(a(t[i])&&i+1<t.length&&o(t[i+1])){d();let e=s(t[i]);i+=2;let r=[];for(;i<t.length&&a(t[i]);)r.push(s(t[i])),i++;n.push({type:`table`,headers:e,rows:r})}else if(e)d(),n.push({type:`heading`,level:e[1].length,content:e[2]}),i++;else if(p)d(),n.push({type:`boldLine`,content:p[1]}),i++;else if(f){d();let e=[];for(;i<t.length;){let n=l(t[i]);if(!n)break;e.push({text:n[2],nested:n[1].length>0}),i++}n.push({type:`bullets`,items:e})}else r.push(t[i]),i++}return d(),n}var _=h(c);function v(){let[e,r]=(0,s.useState)(`ai`),[i,a]=(0,s.useState)(!1),[o,u]=(0,s.useState)(null);async function d(){try{await navigator.clipboard.writeText(c),a(!0),setTimeout(()=>a(!1),2e3)}catch{u(`Could not copy automatically — select the text below and copy manually.`)}}return(0,l.jsxs)(`div`,{className:`min-h-screen bg-deepwater text-foam font-body`,children:[(0,l.jsxs)(`header`,{className:`border-b border-moss/30 px-6 md:px-10 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4`,children:[(0,l.jsxs)(`div`,{children:[(0,l.jsx)(n,{to:`/`,className:`text-xs text-foam-dim hover:text-amber font-mono`,children:`← Back`}),(0,l.jsx)(`h1`,{className:`font-display text-3xl md:text-4xl font-semibold mt-1`,children:e===`ai`?`AI Quickstart & Import Guide`:`Features Guide`})]}),e===`ai`&&(0,l.jsx)(`button`,{onClick:d,className:`btn btn-primary self-start`,children:i?`✓ Copied`:`Copy full documentation`})]}),(0,l.jsxs)(`div`,{className:`px-6 md:px-10 pt-6 flex gap-2`,children:[(0,l.jsx)(w,{active:e===`ai`,onClick:()=>r(`ai`),label:`AI Quickstart`}),(0,l.jsx)(w,{active:e===`features`,onClick:()=>r(`features`),label:`Features Guide`})]}),(0,l.jsx)(`main`,{className:`px-6 md:px-10 py-8 max-w-4xl mx-auto space-y-6`,children:e===`ai`?(0,l.jsxs)(l.Fragment,{children:[(0,l.jsx)(`div`,{className:`card p-5`,children:(0,l.jsxs)(`p`,{className:`text-sm text-foam-dim leading-relaxed`,children:[`This page is written for an AI assistant, and gives it real context on this whole site — not just how to generate an import file. Copy the whole thing above and paste it into a chat with an AI, along with your own aquarium build plan (in whatever level of detail you have). It can talk through what the app actually does, help you think through a plan, and — once you're ready — generate a file you bring in from the`,` `,(0,l.jsx)(`span`,{className:`text-foam`,children:`New Tank`}),` screen's`,` `,(0,l.jsx)(`span`,{className:`text-foam`,children:`"Import a tank from a backup file"`}),` section — works even as a brand-new user with no existing tanks.`]})}),(0,l.jsx)(`div`,{className:`card p-5 space-y-4`,children:_.map((e,t)=>e.type===`code`?(0,l.jsx)(m,{language:e.language,code:e.content},t):(0,l.jsx)(y,{content:e.content},t))})]}):(0,l.jsx)(T,{})}),(0,l.jsx)(t,{message:o,onDismiss:()=>u(null)})]})}function y({content:e}){return(0,l.jsx)(l.Fragment,{children:g(e).map((e,t)=>e.type===`table`?(0,l.jsx)(C,{segment:e},t):e.type===`heading`?(0,l.jsx)(b,{segment:e},t):e.type===`boldLine`?(0,l.jsx)(x,{segment:e},t):e.type===`bullets`?(0,l.jsx)(S,{segment:e},t):e.content.trim()&&(0,l.jsx)(`pre`,{className:`whitespace-pre-wrap font-mono text-xs leading-relaxed text-foam-dim overflow-x-auto`,children:e.content},t))})}function b({segment:e}){return(0,l.jsx)(`h${e.level+1}`,{className:{1:`font-display text-xl font-semibold text-foam mt-2`,2:`font-display text-lg font-semibold text-foam mt-4`,3:`font-display text-base font-semibold text-sand mt-3`}[e.level],children:e.content})}function x({segment:e}){return(0,l.jsx)(`p`,{className:`font-mono text-xs uppercase tracking-wide text-amber mt-3`,children:e.content})}function S({segment:e}){return(0,l.jsx)(`ul`,{className:`space-y-1 text-xs text-foam-dim leading-relaxed`,children:e.items.map((e,t)=>(0,l.jsxs)(`li`,{className:`flex gap-2 ${e.nested?`ml-5`:``}`,children:[(0,l.jsx)(`span`,{className:`text-amber shrink-0`,children:e.nested?`·`:`•`}),(0,l.jsx)(`span`,{children:e.text})]},t))})}function C({segment:e}){return(0,l.jsx)(`div`,{className:`overflow-x-auto`,children:(0,l.jsxs)(`table`,{className:`w-full text-xs border-collapse`,children:[(0,l.jsx)(`thead`,{children:(0,l.jsx)(`tr`,{className:`border-b border-moss/30`,children:e.headers.map((e,t)=>(0,l.jsx)(`th`,{className:`text-left font-mono uppercase tracking-wide text-sand px-2 py-1.5 whitespace-nowrap`,children:e},t))})}),(0,l.jsx)(`tbody`,{children:e.rows.map((e,t)=>(0,l.jsx)(`tr`,{className:`border-b border-moss/10`,children:e.map((e,t)=>(0,l.jsx)(`td`,{className:`align-top px-2 py-1.5 text-foam-dim`,children:e},t))},t))})]})})}function w({active:e,onClick:t,label:n}){return(0,l.jsx)(`button`,{onClick:t,className:`pill py-1.5 px-3 text-xs shrink-0 whitespace-nowrap ${e?`bg-moss text-foam`:`bg-deepwater text-foam-dim hover:text-foam border border-moss/30`}`,children:n})}function T(){return(0,l.jsxs)(`div`,{className:`space-y-4`,children:[(0,l.jsx)(`p`,{className:`text-sm text-foam-dim leading-relaxed`,children:`A few real features live on specific pages and are easy to miss unless you happen to land there. Collected here in one place.`}),(0,l.jsx)(D,{icon:`🖼`,title:`Concept image prompt`,location:`Dashboard`,to:`/`,children:`Assembles this tank's real roster (hardscape, substrate, plants, livestock), style, and dimensions into a ready-to-paste prompt for whatever AI image tool you already use — a way to visualize a build before buying anything. The app never calls an image API itself, only assembles the prompt from real data.`}),(0,l.jsx)(D,{icon:`📋`,title:`Research prompt & auto-fill`,location:`Compatibility`,to:`/targets`,children:`Hands the actual research step to whatever AI you use, for the tank overall or for a single roster item — asks explicitly for real, sourced water-parameter ranges rather than a fabricated single number, and for an averaged, clearly-marked estimate wherever a source is likely to report a range instead of one figure. Paste the AI's reply back in on the same item and it gets parsed into candidate field values for review — only ever matched against this prompt's own labels, never guessed at from surrounding prose, so a wrong-but-plausible number can't slip in from somewhere else in the response. Fields the source itself flagged as uncertain, or where two different values were found for the same field, are never pre-selected — nothing writes to the roster until you actually confirm it.`}),(0,l.jsx)(D,{icon:`📈`,title:`Progress check prompt`,location:`Timeline`,to:`/timeline`,children:`Assembles this tank's real logged history — phase durations, the major-milestone list, and actual entry content grounded to whatever produced a milestone — into a prompt for an honest progress check from an AI, not just a recap of the original plan.`}),(0,l.jsxs)(D,{icon:`📋`,title:`Tidemark Widget`,children:[(0,l.jsx)(`p`,{className:`mb-3`,children:`Embeds this tank's name, age, most relevant schedule task, and last log entry on another page you control, live and refreshed on load. Chrome is the browser this is expected to work in reliably; Safari has real, accepted limitations around the storage access this needs.`}),(0,l.jsx)(m,{language:`html`,code:E})]}),(0,l.jsxs)(D,{icon:`📊`,title:`Opt out of visit tracking`,children:[`This site uses GoatCounter for basic, cookie-free page-view analytics — no personal data, no cross-site tracking. If you would like to opt out, GoatCounter has a real, built-in opt-out: visiting the site with`,` `,(0,l.jsx)(`code`,{className:`font-mono text-amber text-xs bg-deepwater-2 rounded px-1 py-0.5`,children:`#toggle-goatcounter`}),` `,`appended to the URL flips tracking off for that browser specifically, with a popup confirming it took effect`]})]})}var E=`<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:220px;overflow:hidden" loading="lazy"></iframe>`;function D({icon:e,title:t,location:r,to:i,children:a}){return(0,l.jsxs)(`div`,{className:`card p-5`,children:[(0,l.jsxs)(`div`,{className:`flex items-center justify-between gap-3 mb-2`,children:[(0,l.jsxs)(`p`,{className:`font-display text-lg font-semibold`,children:[e,` `,t]}),r&&i&&(0,l.jsxs)(n,{to:i,className:`text-xs font-mono text-sand hover:text-amber whitespace-nowrap`,children:[r,` →`]})]}),(0,l.jsx)(`div`,{className:`text-sm text-foam-dim leading-relaxed`,children:a})]})}export{v as default};
+`)}),r=[])}for(;i<t.length;){let e=c(t[i]),f=l(t[i]),p=u(t[i]);if(a(t[i])&&i+1<t.length&&o(t[i+1])){d();let e=s(t[i]);i+=2;let r=[];for(;i<t.length&&a(t[i]);)r.push(s(t[i])),i++;n.push({type:`table`,headers:e,rows:r})}else if(e)d(),n.push({type:`heading`,level:e[1].length,content:e[2]}),i++;else if(p)d(),n.push({type:`boldLine`,content:p[1]}),i++;else if(f){d();let e=[];for(;i<t.length;){let n=l(t[i]);if(!n)break;e.push({text:n[2],nested:n[1].length>0}),i++}n.push({type:`bullets`,items:e})}else r.push(t[i]),i++}return d(),n}var _=h(c);function v(){let[e,t]=(0,s.useState)(`ai`),[i,a]=(0,s.useState)(!1),[o,u]=(0,s.useState)(null);async function d(){try{await navigator.clipboard.writeText(c),a(!0),setTimeout(()=>a(!1),2e3)}catch{u(`Could not copy automatically — select the text below and copy manually.`)}}return(0,l.jsxs)(`div`,{className:`min-h-screen bg-deepwater text-foam font-body`,children:[(0,l.jsxs)(`header`,{className:`border-b border-moss/30 px-6 md:px-10 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4`,children:[(0,l.jsxs)(`div`,{children:[(0,l.jsx)(n,{to:`/`,className:`text-xs text-foam-dim hover:text-amber font-mono`,children:`← Back`}),(0,l.jsx)(`h1`,{className:`font-display text-3xl md:text-4xl font-semibold mt-1`,children:e===`ai`?`AI Quickstart & Import Guide`:`Features Guide`})]}),e===`ai`&&(0,l.jsx)(`button`,{onClick:d,className:`btn btn-primary self-start`,children:i?`✓ Copied`:`Copy full documentation`})]}),(0,l.jsxs)(`div`,{className:`px-6 md:px-10 pt-6 flex gap-2`,children:[(0,l.jsx)(w,{active:e===`ai`,onClick:()=>t(`ai`),label:`AI Quickstart`}),(0,l.jsx)(w,{active:e===`features`,onClick:()=>t(`features`),label:`Features Guide`})]}),(0,l.jsx)(`main`,{className:`px-6 md:px-10 py-8 max-w-4xl mx-auto space-y-6`,children:e===`ai`?(0,l.jsxs)(l.Fragment,{children:[(0,l.jsx)(`div`,{className:`card p-5`,children:(0,l.jsxs)(`p`,{className:`text-sm text-foam-dim leading-relaxed`,children:[`This page is written for an AI assistant, and gives it real context on this whole site — not just how to generate an import file. Copy the whole thing above and paste it into a chat with an AI, along with your own aquarium build plan (in whatever level of detail you have). It can talk through what the app actually does, help you think through a plan, and — once you're ready — generate a file you bring in from the`,` `,(0,l.jsx)(`span`,{className:`text-foam`,children:`New Tank`}),` screen's`,` `,(0,l.jsx)(`span`,{className:`text-foam`,children:`"Import a tank from a backup file"`}),` section — works even as a brand-new user with no existing tanks.`]})}),(0,l.jsx)(`div`,{className:`card p-5 space-y-4`,children:_.map((e,t)=>e.type===`code`?(0,l.jsx)(m,{language:e.language,code:e.content},t):(0,l.jsx)(y,{content:e.content},t))})]}):(0,l.jsx)(T,{})}),(0,l.jsx)(r,{message:o,onDismiss:()=>u(null)})]})}function y({content:e}){return(0,l.jsx)(l.Fragment,{children:g(e).map((e,t)=>e.type===`table`?(0,l.jsx)(C,{segment:e},t):e.type===`heading`?(0,l.jsx)(b,{segment:e},t):e.type===`boldLine`?(0,l.jsx)(x,{segment:e},t):e.type===`bullets`?(0,l.jsx)(S,{segment:e},t):e.content.trim()&&(0,l.jsx)(`pre`,{className:`whitespace-pre-wrap font-mono text-xs leading-relaxed text-foam-dim overflow-x-auto`,children:e.content},t))})}function b({segment:e}){return(0,l.jsx)(`h${e.level+1}`,{className:{1:`font-display text-xl font-semibold text-foam mt-2`,2:`font-display text-lg font-semibold text-foam mt-4`,3:`font-display text-base font-semibold text-sand mt-3`}[e.level],children:e.content})}function x({segment:e}){return(0,l.jsx)(`p`,{className:`font-mono text-xs uppercase tracking-wide text-amber mt-3`,children:e.content})}function S({segment:e}){return(0,l.jsx)(`ul`,{className:`space-y-1 text-xs text-foam-dim leading-relaxed`,children:e.items.map((e,t)=>(0,l.jsxs)(`li`,{className:`flex gap-2 ${e.nested?`ml-5`:``}`,children:[(0,l.jsx)(`span`,{className:`text-amber shrink-0`,children:e.nested?`·`:`•`}),(0,l.jsx)(`span`,{children:e.text})]},t))})}function C({segment:e}){return(0,l.jsx)(`div`,{className:`overflow-x-auto`,children:(0,l.jsxs)(`table`,{className:`w-full text-xs border-collapse`,children:[(0,l.jsx)(`thead`,{children:(0,l.jsx)(`tr`,{className:`border-b border-moss/30`,children:e.headers.map((e,t)=>(0,l.jsx)(`th`,{className:`text-left font-mono uppercase tracking-wide text-sand px-2 py-1.5 whitespace-nowrap`,children:e},t))})}),(0,l.jsx)(`tbody`,{children:e.rows.map((e,t)=>(0,l.jsx)(`tr`,{className:`border-b border-moss/10`,children:e.map((e,t)=>(0,l.jsx)(`td`,{className:`align-top px-2 py-1.5 text-foam-dim`,children:e},t))},t))})]})})}function w({active:e,onClick:t,label:n}){return(0,l.jsx)(`button`,{onClick:t,className:`pill py-1.5 px-3 text-xs shrink-0 whitespace-nowrap ${e?`bg-moss text-foam`:`bg-deepwater text-foam-dim hover:text-foam border border-moss/30`}`,children:n})}function T(){return(0,l.jsxs)(`div`,{className:`space-y-4`,children:[(0,l.jsx)(`p`,{className:`text-sm text-foam-dim leading-relaxed`,children:`A few real features live on specific pages and are easy to miss unless you happen to land there. Collected here in one place.`}),(0,l.jsx)(D,{icon:`🖼`,title:`Concept image prompt`,location:`Dashboard`,to:`/`,children:`Assembles this tank's real roster (hardscape, substrate, plants, livestock), style, and dimensions into a ready-to-paste prompt for whatever AI image tool you already use — a way to visualize a build before buying anything. The app never calls an image API itself, only assembles the prompt from real data.`}),(0,l.jsx)(D,{icon:`📋`,title:`Research prompt & auto-fill`,location:`Compatibility`,to:`/targets`,children:`Hands the actual research step to whatever AI you use, for the tank overall or for a single roster item — asks explicitly for real, sourced water-parameter ranges rather than a fabricated single number, and for an averaged, clearly-marked estimate wherever a source is likely to report a range instead of one figure. Paste the AI's reply back in on the same item and it gets parsed into candidate field values for review — only ever matched against this prompt's own labels, never guessed at from surrounding prose, so a wrong-but-plausible number can't slip in from somewhere else in the response. Fields the source itself flagged as uncertain, or where two different values were found for the same field, are never pre-selected — nothing writes to the roster until you actually confirm it.`}),(0,l.jsx)(D,{icon:`📈`,title:`Progress check prompt`,location:`Timeline`,to:`/timeline`,children:`Assembles this tank's real logged history — phase durations, the major-milestone list, and actual entry content grounded to whatever produced a milestone — into a prompt for an honest progress check from an AI, not just a recap of the original plan.`}),(0,l.jsxs)(D,{icon:`📋`,title:`Tidemark Widget`,children:[(0,l.jsx)(`p`,{className:`mb-3`,children:`Embeds this tank's name, age, most relevant schedule task, and last log entry on another page you control, live and refreshed on load. Chrome is the browser this is expected to work in reliably; Safari has real, accepted limitations around the storage access this needs.`}),(0,l.jsx)(m,{language:`html`,code:E})]}),(0,l.jsxs)(D,{icon:`📊`,title:`Opt out of visit tracking`,children:[`This site uses GoatCounter for basic, cookie-free page-view analytics — no personal data, no cross-site tracking. If you would like to opt out, GoatCounter has a real, built-in opt-out: visiting the site with`,` `,(0,l.jsx)(`code`,{className:`font-mono text-amber text-xs bg-deepwater-2 rounded px-1 py-0.5`,children:`#toggle-goatcounter`}),` `,`appended to the URL flips tracking off for that browser specifically, with a popup confirming it took effect`]})]})}var E=`<iframe src="https://ettran777.github.io/aquariumTool/#/widget" style="border:0;width:300px;height:220px;overflow:hidden" loading="lazy"></iframe>`;function D({icon:e,title:t,location:r,to:i,children:a}){return(0,l.jsxs)(`div`,{className:`card p-5`,children:[(0,l.jsxs)(`div`,{className:`flex items-center justify-between gap-3 mb-2`,children:[(0,l.jsxs)(`p`,{className:`font-display text-lg font-semibold`,children:[e,` `,t]}),r&&i&&(0,l.jsxs)(n,{to:i,className:`text-xs font-mono text-sand hover:text-amber whitespace-nowrap`,children:[r,` →`]})]}),(0,l.jsx)(`div`,{className:`text-sm text-foam-dim leading-relaxed`,children:a})]})}export{v as default};
