@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { PRESET_FIELDS } from '../data/presetFields';
 import type { CustomFieldDef, CustomFieldType } from '../types';
 import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
 import ConfirmModal from '../components/ConfirmModal';
+import { migrateInlinePhotosToIndexedDb, formatBytes } from '../lib/storage';
+import { isStoredPhotoRef } from '../lib/photoStore';
 
 const TYPE_LABELS: Record<CustomFieldType, string> = {
   number: 'Number',
@@ -13,9 +15,13 @@ const TYPE_LABELS: Record<CustomFieldType, string> = {
 };
 
 export default function Settings() {
-  const { activeTank, updateTank, setCustomFields, deleteTank } = useData();
+  const { activeTank, updateTank, setCustomFields, deleteTank, data, setData } = useData();
   const navigate = useNavigate();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [freeingStorage, setFreeingStorage] = useState(false);
+  const [freeStorageResult, setFreeStorageResult] = useState<
+    { migratedCount: number; bytesFreed: number } | 'error' | null
+  >(null);
 
   const [name, setName] = useState(activeTank?.name ?? '');
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons?.toString() ?? '');
@@ -31,6 +37,42 @@ export default function Settings() {
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('number');
   const [showPresets, setShowPresets] = useState(false);
+
+  // Counted from the plain string length, matching migrateInlinePhotosToIndexedDb's
+  // own accounting — this is specifically "how much shorter would the
+  // localStorage JSON be," the actual quota pressure, not the photo's real
+  // byte size (which is somewhat smaller, since this length includes the
+  // base64 inflation that storing it as a Blob removes entirely).
+  const { legacyPhotoCount, legacyPhotoBytes } = useMemo(() => {
+    let count = 0;
+    let bytes = 0;
+    for (const t of data.tanks) {
+      for (const l of t.logs) {
+        for (const url of l.photoUrls ?? []) {
+          if (!isStoredPhotoRef(url)) {
+            count += 1;
+            bytes += url.length;
+          }
+        }
+      }
+    }
+    return { legacyPhotoCount: count, legacyPhotoBytes: bytes };
+  }, [data.tanks]);
+
+  async function handleFreeStorage() {
+    setFreeingStorage(true);
+    setFreeStorageResult(null);
+    try {
+      const { data: migrated, migratedCount, bytesFreed } = await migrateInlinePhotosToIndexedDb(data);
+      setData(migrated);
+      setFreeStorageResult({ migratedCount, bytesFreed });
+    } catch (err) {
+      console.error(err);
+      setFreeStorageResult('error');
+    } finally {
+      setFreeingStorage(false);
+    }
+  }
 
   if (!activeTank) return null;
 
@@ -327,6 +369,50 @@ export default function Settings() {
           </button>
         </form>
       </div>
+
+      {/* legacyPhotoCount alone would make this card (success message
+          included) disappear the instant a migration succeeds — it drops
+          to 0 in the very same render that sets freeStorageResult, so the
+          confirmation would never actually be visible. Keeping the card up
+          while there's a result to show fixes that without changing when
+          the button/count messaging itself needs to appear. */}
+      {(legacyPhotoCount > 0 || freeStorageResult) && (
+        <div className="card p-5 space-y-3">
+          <p className="field-label">Local storage</p>
+          {legacyPhotoCount > 0 && (
+            <p className="text-xs text-foam-dim">
+              {legacyPhotoCount} photo{legacyPhotoCount === 1 ? '' : 's'} across every tank{' '}
+              {legacyPhotoCount === 1 ? 'is' : 'are'} still stored the old way — inline in the same
+              place as everything else the app saves, which is what a full quota looks like. Moving
+              {legacyPhotoCount === 1 ? ' it' : ' them'} to the browser's photo storage instead frees
+              up roughly {formatBytes(legacyPhotoBytes)} without losing or changing anything about the
+              photos themselves — they'll look and work exactly the same everywhere in the app,
+              including in an exported backup.
+            </p>
+          )}
+          {legacyPhotoCount > 0 && (
+            <button
+              onClick={handleFreeStorage}
+              disabled={freeingStorage}
+              className="btn btn-secondary disabled:opacity-50"
+            >
+              {freeingStorage ? 'Freeing up storage…' : 'Free up local storage'}
+            </button>
+          )}
+          {freeStorageResult === 'error' && (
+            <p className="text-xs text-coral">
+              Couldn't complete this — your browser may be blocking this kind of storage. Nothing
+              was changed; your photos are exactly as they were.
+            </p>
+          )}
+          {freeStorageResult && freeStorageResult !== 'error' && (
+            <p className="text-xs text-moss-light">
+              Moved {freeStorageResult.migratedCount} photo{freeStorageResult.migratedCount === 1 ? '' : 's'},
+              freeing about {formatBytes(freeStorageResult.bytesFreed)}.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="card border-coral/30 p-5 space-y-3">
         <p className="field-label text-coral">Danger zone</p>

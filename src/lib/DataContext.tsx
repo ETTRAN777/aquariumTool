@@ -1,12 +1,28 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef, ScheduleTask, Milestone } from '../types';
-import { loadData, saveData } from './storage';
+import { loadData, saveData, migrateInlinePhotosToIndexedDb, type SaveFailureReason } from './storage';
 import { todayIso, addDays, toIsoDate } from './date';
 import { recomputeAutoMilestones } from './milestones';
 
 interface DataContextValue {
   data: AppData;
   setData: (data: AppData) => void;
+  // Non-null while the most recent attempt to persist to localStorage has
+  // failed — clears itself the next time a save succeeds (e.g. after the
+  // person frees up space), so the warning never outlives the problem.
+  // Only ever reaches this state once the automatic recovery below has
+  // already been tried and genuinely couldn't fix it on its own.
+  saveFailure: SaveFailureReason | null;
+  // Set briefly after a quota failure gets fixed automatically (see the
+  // save effect) — Layout surfaces this as a transient, no-action-needed
+  // toast. Null the rest of the time, including while nothing has gone
+  // wrong at all.
+  autoFreedStorage: { migratedCount: number; bytesFreed: number } | null;
+  // Call once the person has seen/dismissed the auto-freed-storage toast —
+  // without this, Layout has no correct way to tell "already shown" from
+  // "a new event with the same photo count," since the count alone isn't
+  // a reliable identity for the event.
+  clearAutoFreedStorage: () => void;
   activeTank: Tank | undefined;
   updateTank: (tankOrUpdater: Tank | ((prev: Tank) => Tank)) => void;
   createTank: (tank: Tank) => void;
@@ -34,8 +50,51 @@ const DataContext = createContext<DataContextValue | null>(null);
 export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setDataState] = useState<AppData>(() => loadData());
 
+  const [saveFailure, setSaveFailure] = useState<SaveFailureReason | null>(null);
+  const [autoFreedStorage, setAutoFreedStorage] = useState<
+    { migratedCount: number; bytesFreed: number } | null
+  >(null);
+
   useEffect(() => {
-    saveData(data);
+    // A full quota almost always means photos — they're the one thing in
+    // this app's data that gets genuinely large — and moving them to
+    // IndexedDB is a mechanical fix with no real judgment call in it, not
+    // something to make the person diagnose and click a button for. This
+    // is deliberately narrower than the Settings "Free up local storage"
+    // button it reuses: it only ever fires in response to an actual
+    // failure, and only for 'quota' specifically — 'unavailable' means
+    // storage is blocked outright (e.g. some private-browsing modes),
+    // which moving data to a DIFFERENT storage API can't fix, so that
+    // case is left exactly as it already was, no migration attempted.
+    let cancelled = false;
+    (async () => {
+      const result = saveData(data);
+      if (result.ok) {
+        if (!cancelled) setSaveFailure(null);
+        return;
+      }
+      if (result.reason === 'quota') {
+        const migration = await migrateInlinePhotosToIndexedDb(data);
+        if (cancelled) return;
+        if (migration.migratedCount > 0) {
+          setAutoFreedStorage({
+            migratedCount: migration.migratedCount,
+            bytesFreed: migration.bytesFreed,
+          });
+          // Deliberately not a second saveData() call here: committing the
+          // migrated data to state re-triggers this very effect, and that
+          // next run's own saveData() is the real, authoritative retry —
+          // its outcome (not an assumption that migrating necessarily
+          // fixed it) is what actually decides whether saveFailure clears.
+          setDataState(migration.data);
+          return;
+        }
+      }
+      if (!cancelled) setSaveFailure(result.reason);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [data]);
 
   const activeTank = data.tanks.find((t) => t.id === data.activeTankId);
@@ -305,6 +364,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       value={{
         data,
         setData,
+        saveFailure,
+        autoFreedStorage,
+        clearAutoFreedStorage: () => setAutoFreedStorage(null),
         activeTank,
         updateTank,
         createTank,

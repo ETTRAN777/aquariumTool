@@ -3,7 +3,7 @@ import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
 import { daysUntil, formatDue, effectiveDueDate, scheduleAnchorDate, TONE_CLASSES } from '../lib/schedule';
-import type { ScheduleTask } from '../types';
+import type { ScheduleTask, Tank } from '../types';
 import Toast from '../components/Toast';
 
 // Preset recurrence intervals cover the common cases (daily feeding, weekly
@@ -52,10 +52,18 @@ function buildMonthGrid(year: number, month: number): Date[] {
 // is a preview — there's no per-occurrence completion state to attach a
 // complete/edit/delete action to, since completing the real occurrence is
 // what rolls the whole task forward.
+// 'actual' is the task's one real, currently-due occurrence; 'preview' is
+// a future recurrence projected forward from it, with no state of its own
+// (see the comment above occurrencesInRange). 'completed' is new: the
+// specific day a recurring task was actually completed on, surfaced
+// separately from 'actual' because completing a recurring task rolls its
+// one real occurrence forward past today — without this, the day it was
+// completed on would show nothing at all, which read as the completion
+// having silently failed rather than having happened.
 interface CalendarOccurrence {
   task: ScheduleTask;
   date: string;
-  actual: boolean;
+  kind: 'actual' | 'preview' | 'completed';
 }
 
 function occurrencesInRange(
@@ -77,23 +85,56 @@ function occurrencesInRange(
     const effective = effectiveDueDate(t, anchorDate) ?? t.dueDate;
     const cap = t.endDate && t.endDate < rangeEnd ? t.endDate : rangeEnd;
     if (effective >= rangeStart && effective <= rangeEnd && (!t.endDate || effective <= t.endDate)) {
-      occurrences.push({ task: t, date: effective, actual: true });
+      occurrences.push({ task: t, date: effective, kind: 'actual' });
     }
     if (t.recurrenceDays) {
       let d = effective;
       while (true) {
         d = addDays(d, t.recurrenceDays);
         if (d > cap) break;
-        if (d >= rangeStart) occurrences.push({ task: t, date: d, actual: false });
+        if (d >= rangeStart) occurrences.push({ task: t, date: d, kind: 'preview' });
+      }
+      // The day this task was last completed doesn't otherwise appear
+      // anywhere — completing it rolled dueDate/effective past today, so
+      // without this the completed day would just show nothing, and
+      // completing looked identical to the task silently vanishing.
+      // Guarded against equaling `effective` for the (currently
+      // unreachable in practice, since completion always rolls strictly
+      // past today — see completeScheduleTask's do/while) case of a
+      // hand-edited dueDate landing back on the same day as the last
+      // completion, which would otherwise double up as both an 'actual'
+      // and a 'completed' entry for one occurrence.
+      if (
+        t.lastCompletedDate &&
+        t.lastCompletedDate !== effective &&
+        t.lastCompletedDate >= rangeStart &&
+        t.lastCompletedDate <= rangeEnd
+      ) {
+        occurrences.push({ task: t, date: t.lastCompletedDate, kind: 'completed' });
       }
     }
   }
   return occurrences;
 }
 
+// The no-active-tank guard lives here, in a wrapper, rather than as an
+// early return partway through the component that holds the hooks. The
+// old version returned null before two useMemo calls further down —
+// a Rules of Hooks violation: the hook count differed between the
+// render that hit the guard and the ones that didn't, which React treats
+// as an error the first time activeTank flips between missing and
+// present while this page is mounted. Splitting it means every hook in
+// ScheduleView runs on every render, unconditionally, and activeTank is
+// simply never null by the time it gets there (which also removes the
+// need for the narrowing the early return used to provide).
 export default function Schedule() {
-  const { activeTank, addScheduleTask, updateScheduleTask, deleteScheduleTask, completeScheduleTask } =
-    useData();
+  const { activeTank } = useData();
+  if (!activeTank) return null;
+  return <ScheduleView activeTank={activeTank} />;
+}
+
+function ScheduleView({ activeTank }: { activeTank: Tank }) {
+  const { addScheduleTask, updateScheduleTask, deleteScheduleTask, completeScheduleTask } = useData();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [justLinked, setJustLinked] = useState<string | null>(null);
@@ -104,7 +145,6 @@ export default function Schedule() {
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState(todayIso());
 
-  if (!activeTank) return null;
   const tank = activeTank;
   const { schedule } = tank;
   // Computed once, reused everywhere below — a "Built" milestone's date
@@ -294,11 +334,19 @@ export default function Schedule() {
                     <span
                       key={`${occ.task.id}-${i}`}
                       className={
-                        occ.actual
+                        occ.kind === 'actual'
                           ? `w-1.5 h-1.5 rounded-full ${DOT_CLASSES[formatDue(occ.date).tone]}`
+                          : occ.kind === 'completed'
+                          ? 'w-1.5 h-1.5 rounded-full bg-moss' // same solid "done" green used for a checked-off Checklist item elsewhere in the app — deliberately not moss-light, which the preview dot below already uses for a different meaning (outline) and the "later" tone dot uses for solid, so a completed day can't read as either
                           : 'w-1.5 h-1.5 rounded-full border border-moss-light bg-transparent'
                       }
-                      title={occ.actual ? occ.task.label : `${occ.task.label} (upcoming)`}
+                      title={
+                        occ.kind === 'actual'
+                          ? occ.task.label
+                          : occ.kind === 'completed'
+                          ? `${occ.task.label} (completed)`
+                          : `${occ.task.label} (upcoming)`
+                      }
                     />
                   ))}
                   {overflow > 0 && (
@@ -317,6 +365,9 @@ export default function Schedule() {
           <span className="inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full border border-moss-light inline-block" /> upcoming
             recurrence (preview)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-moss inline-block" /> completed
           </span>
         </p>
       </div>
@@ -359,10 +410,50 @@ export default function Schedule() {
           {selectedOccurrences.map((occ) => {
             const task = occ.task;
 
+            // A recurring task's own last completion, surfaced on the day
+            // it actually happened — see occurrencesInRange's comment for
+            // why this exists at all. Read-only, like the preview case
+            // below: the real occurrence to act on is elsewhere now (its
+            // dueDate already rolled forward), not this day.
+            if (occ.kind === 'completed') {
+              const next = effectiveDueDate(task, anchorDate);
+              return (
+                <li key={`${task.id}-completed`} className="card p-3 opacity-70">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-moss text-sm">✓</span>
+                    <p className="text-sm text-foam-dim line-through">{task.label}</p>
+                    <span className="pill text-[11px] py-0.5 px-2 bg-moss/15 text-foam-dim">
+                      done this day
+                    </span>
+                    {/* Only reachable here now, not on the 'actual' card below —
+                        a recurring task's occurrence has already rolled forward
+                        by the time this note would render, so this was
+                        previously dead code there (see handleComplete: the
+                        state update and this note land in the same render,
+                        but by then the occurrence for `today` isn't `actual`
+                        anymore, it's this 'completed' entry). */}
+                    {justLinked === task.id && (
+                      <span className="text-[11px] text-moss-light">🔗 linked to today's log</span>
+                    )}
+                  </div>
+                  {next && (
+                    <p className="text-[11px] text-foam-dim/50 mt-1.5">
+                      Next due{' '}
+                      {(() => {
+                        const due = formatDue(next);
+                        return due.tone === 'later' ? parseIsoDate(next).toLocaleDateString() : due.label.toLowerCase();
+                      })()}
+                      .
+                    </p>
+                  )}
+                </li>
+              );
+            }
+
             // Projected future occurrence, not the task's actual current
             // dueDate — nothing to complete/edit/delete against this
             // specific date, since only the real occurrence carries state.
-            if (!occ.actual) {
+            if (occ.kind === 'preview') {
               return (
                 <li
                   key={`${task.id}-preview`}
@@ -438,9 +529,14 @@ export default function Schedule() {
                           ⏱ ends {parseIsoDate(task.endDate).toLocaleDateString()}
                         </span>
                       )}
-                      {justLinked === task.id && (
-                        <span className="text-[11px] text-moss-light">🔗 linked to today's log</span>
-                      )}
+                      {/* justLinked's note used to be here, but this card is
+                          the occurrence's *next* due date by the time a
+                          completion has happened — see the 'completed'
+                          branch above, where the note is actually reachable
+                          for a recurring task. A completed one-off has no
+                          equivalent occurrence card at all (see `finished`
+                          below), so it still can't show this note anywhere;
+                          flagged, not fixed here — out of this bug's scope. */}
                     </div>
                     {task.detail && (
                       <p className="text-xs text-foam-dim mt-1.5 leading-relaxed">{task.detail}</p>
@@ -535,8 +631,13 @@ export default function Schedule() {
                 key={task.id}
                 className="flex items-center justify-between text-xs text-foam-dim/70 px-1"
               >
-                <span className="line-through">{task.label}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="line-through truncate">{task.label}</span>
+                  {justLinked === task.id && (
+                    <span className="text-moss-light shrink-0">🔗 linked to today's log</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                   {task.lastCompletedDate && (
                     <span>{parseIsoDate(task.lastCompletedDate).toLocaleDateString()}</span>
                   )}

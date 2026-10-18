@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Tank, RosterItem } from '../types';
 import { tankLifetimeDuration, formatTankAge } from '../lib/duration';
+import TankPhoto from './TankPhoto';
 import { MOOD_LABELS, type Mood } from '../lib/constants';
 import Waterline from './Waterline';
 import {
@@ -559,7 +560,7 @@ function buildSlides(tank: Tank, inventory: ReturnType<typeof computeStoryInvent
               )}
               {snippet && <p className="text-foam-dim text-sm max-w-sm mx-auto mb-4">{snippet}</p>}
               {photo && (
-                <img
+                <TankPhoto
                   src={photo}
                   alt=""
                   className="w-48 h-48 rounded-lg border border-moss/30 object-cover mx-auto"
@@ -631,7 +632,7 @@ function buildSlides(tank: Tank, inventory: ReturnType<typeof computeStoryInvent
               highlighted <StatNumber value={star.count} /> time{star.count === 1 ? '' : 's'}
             </p>
             {photo && (
-              <img
+              <TankPhoto
                 src={photo}
                 alt=""
                 className="w-48 h-48 rounded-lg border border-moss/30 object-cover mx-auto"

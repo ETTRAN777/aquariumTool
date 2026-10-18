@@ -12,12 +12,19 @@ export default function ExportPickerModal({
   activeTank,
   onExport,
   onCancel,
+  isExporting = false,
 }: {
   open: boolean;
   tanks: Tank[];
   activeTank: Tank;
   onExport: (tanks: Tank[], stripImages: boolean) => void;
   onCancel: () => void;
+  // Export now has to hydrate any IndexedDB-stored photos back into real
+  // base64 before it can write a self-contained file — invisible for a
+  // small backup, but a real, worth-signaling delay for a photo-heavy one.
+  // Optional, defaulted, so nothing else that renders this modal needs to
+  // change.
+  isExporting?: boolean;
 }) {
   const [chooseOpen, setChooseOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -50,11 +57,19 @@ export default function ExportPickerModal({
           Export backup
         </h2>
         <div className="flex flex-col gap-2">
-          <button onClick={() => onExport(tanks, stripImages)} className="btn btn-primary text-left">
-            All tanks ({tanks.length})
+          <button
+            onClick={() => onExport(tanks, stripImages)}
+            disabled={isExporting}
+            className="btn btn-primary text-left disabled:opacity-50"
+          >
+            {isExporting ? 'Exporting…' : `All tanks (${tanks.length})`}
           </button>
-          <button onClick={() => onExport([activeTank], stripImages)} className="btn btn-secondary text-left">
-            Just "{activeTank.name}"
+          <button
+            onClick={() => onExport([activeTank], stripImages)}
+            disabled={isExporting}
+            className="btn btn-secondary text-left disabled:opacity-50"
+          >
+            {isExporting ? 'Exporting…' : `Just "${activeTank.name}"`}
           </button>
 
           <button
@@ -85,10 +100,12 @@ export default function ExportPickerModal({
               </div>
               <button
                 onClick={() => onExport(tanks.filter((t) => selectedIds.includes(t.id)), stripImages)}
-                disabled={selectedIds.length === 0}
+                disabled={selectedIds.length === 0 || isExporting}
                 className="btn btn-secondary text-xs w-full disabled:opacity-50"
               >
-                Export {selectedIds.length} tank{selectedIds.length === 1 ? '' : 's'}
+                {isExporting
+                  ? 'Exporting…'
+                  : `Export ${selectedIds.length} tank${selectedIds.length === 1 ? '' : 's'}`}
               </button>
             </div>
           )}

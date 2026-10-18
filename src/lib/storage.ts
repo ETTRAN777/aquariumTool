@@ -12,6 +12,7 @@ import type {
   WaterParams,
 } from '../types';
 import { seedData } from '../data/seed';
+import { getPhoto, putPhoto, makePhotoRef, isStoredPhotoRef, photoRefId } from './photoStore';
 import {
   NAME_MAX_LENGTH,
   STYLE_MAX_LENGTH,
@@ -1069,12 +1070,93 @@ export function loadData(): AppData {
   }
 }
 
-export function saveData(data: AppData): void {
+// Why a save failed, kept coarse on purpose: 'quota' means the browser's
+// per-origin storage limit was hit (the realistic case here — log photos
+// are stored as base64 text inside this one localStorage entry), and
+// 'unavailable' covers everything else (storage blocked outright, e.g. by
+// a privacy setting or some private-browsing modes). The UI only needs
+// to word the explanation differently for the two, not distinguish every
+// possible DOMException.
+export type SaveFailureReason = 'quota' | 'unavailable';
+export type SaveResult = { ok: true } | { ok: false; reason: SaveFailureReason };
+
+// Browsers disagree on how a quota error announces itself: the standard
+// name, Firefox's legacy name, and the older numeric codes (22 in most
+// engines, 1014 in old Firefox) all mean the same thing.
+function isQuotaError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 ||
+      err.code === 1014)
+  );
+}
+
+// Returns the outcome instead of swallowing it — a failed save used to be
+// a console.error nobody would ever see, meaning someone's most recent
+// edits could silently fail to persist and vanish on the next refresh.
+// DataProvider turns a failure into a persistent, visible warning.
+export function saveData(data: AppData): SaveResult {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return { ok: true };
   } catch (err) {
     console.error('Failed to save — storage may be full', err);
+    return { ok: false, reason: isQuotaError(err) ? 'quota' : 'unavailable' };
   }
+}
+
+// The actual emergency-relief action: walks every log entry across every
+// tank, converts each PLAIN (already-base64) photo into a real Blob in
+// IndexedDB, and replaces it with an idb-photo: reference — shrinking
+// exactly the thing that was filling up localStorage, on demand, for data
+// that's already sitting there. Never touches a photo that's already a
+// stored reference. Returns the updated data alongside a plain count/byte
+// summary so the UI can report something concrete rather than just
+// "done."
+// Shared by Settings' "Free up local storage" button and the automatic
+// quota-recovery toast — same number, same wording, wherever it's shown.
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export async function migrateInlinePhotosToIndexedDb(
+  data: AppData
+): Promise<{ data: AppData; migratedCount: number; bytesFreed: number }> {
+  let migratedCount = 0;
+  let bytesFreed = 0;
+
+  const tanks = await Promise.all(
+    data.tanks.map(async (t) => ({
+      ...t,
+      logs: await Promise.all(
+        t.logs.map(async (l) => {
+          if (!l.photoUrls || l.photoUrls.length === 0) return l;
+          const photoUrls = await Promise.all(
+            l.photoUrls.map(async (url) => {
+              if (isStoredPhotoRef(url)) return url;
+              const blob = await dataUrlToBlob(url);
+              const id = crypto.randomUUID();
+              await putPhoto(id, blob);
+              migratedCount += 1;
+              // The inline string's length, not the blob's byte size — this
+              // is specifically "how much shorter is the JSON localStorage
+              // has to hold now," which is the actual quota pressure being
+              // relieved, not a measure of the photo itself.
+              bytesFreed += url.length;
+              return makePhotoRef(id);
+            })
+          );
+          return { ...l, photoUrls };
+        })
+      ),
+    }))
+  );
+
+  return { data: { ...data, tanks }, migratedCount, bytesFreed };
 }
 
 function slugify(name: string): string {
@@ -1084,14 +1166,58 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-// Shared by exportData() (file download) and Google Drive upload — same
-// formatting regardless of destination.
-export function serializeBackup(data: AppData): string {
-  return JSON.stringify(data, null, 2);
+// Replaces every idb-photo: reference in a copy of the given tanks with
+// the real base64 data URI it points to — a backup file has to be a
+// single, self-contained JSON document that means the same thing on any
+// device, and an idb-photo: reference is only meaningful in the browser
+// whose IndexedDB actually holds that Blob. Never mutates the live tank
+// data; only ever produces a fresh copy for serializeBackup to send
+// onward. A photo whose Blob is missing (shouldn't normally happen, but
+// isn't worth failing an entire export over) is silently dropped from the
+// copy rather than aborting the whole operation.
+async function hydrateStoredPhotos(tanks: Tank[]): Promise<Tank[]> {
+  const refs = new Set<string>();
+  for (const t of tanks) {
+    for (const l of t.logs) {
+      for (const url of l.photoUrls ?? []) {
+        if (isStoredPhotoRef(url)) refs.add(url);
+      }
+    }
+  }
+  if (refs.size === 0) return tanks;
+
+  const hydrated = new Map<string, string>();
+  for (const ref of refs) {
+    const blob = await getPhoto(photoRefId(ref));
+    if (blob) hydrated.set(ref, await blobToDataUrl(blob));
+  }
+
+  return tanks.map((t) => ({
+    ...t,
+    logs: t.logs.map((l) => {
+      if (!l.photoUrls?.some(isStoredPhotoRef)) return l;
+      return {
+        ...l,
+        photoUrls: l.photoUrls.flatMap((url) => {
+          if (!isStoredPhotoRef(url)) return [url];
+          const real = hydrated.get(url);
+          return real ? [real] : [];
+        }),
+      };
+    }),
+  }));
 }
 
-export function exportData(data: AppData, activeTankName?: string, noImages?: boolean): void {
-  const blob = new Blob([serializeBackup(data)], { type: 'application/json' });
+// Shared by exportData() (file download) and Google Drive upload — same
+// formatting regardless of destination. Async specifically for the
+// hydration step above — every stored photo has to be resolved to a real
+// data URI before this can be a complete, portable JSON document.
+export async function serializeBackup(data: AppData): Promise<string> {
+  return JSON.stringify({ ...data, tanks: await hydrateStoredPhotos(data.tanks) }, null, 2);
+}
+
+export async function exportData(data: AppData, activeTankName?: string, noImages?: boolean): Promise<void> {
+  const blob = new Blob([await serializeBackup(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const date = new Date().toISOString().split('T')[0];
@@ -1132,7 +1258,10 @@ export function importData(file: File): Promise<{ data: AppData; warnings: strin
   });
 }
 
-export function resizeImageToBase64(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+// Shared by resizeImageToBase64 and resizeImageToBlob below — same
+// decode-and-downscale work either output format needs, so it only
+// happens once.
+function loadScaledCanvas(file: File, maxDim: number): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const reader = new FileReader();
@@ -1150,7 +1279,7 @@ export function resizeImageToBase64(file: File, maxDim = 1200, quality = 0.82): 
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas not supported'));
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        resolve(canvas);
       };
       img.onerror = () => reject(new Error('Could not load image'));
       img.src = reader.result as string;
@@ -1158,4 +1287,54 @@ export function resizeImageToBase64(file: File, maxDim = 1200, quality = 0.82): 
     reader.onerror = () => reject(new Error('Could not read file'));
     reader.readAsDataURL(file);
   });
+}
+
+// Kept for the legacy inline-storage path (a photo stored as a real data
+// URI, from before the IndexedDB photo store, or on a browser where it's
+// unavailable — see resizeImageToBlob's caller in Log.tsx). Behavior is
+// unchanged from before this file was split; only the shared decode step
+// moved into loadScaledCanvas.
+export async function resizeImageToBase64(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+  const canvas = await loadScaledCanvas(file, maxDim);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+// The real fix for photos ballooning localStorage: a Blob has no base64
+// tax (canvas.toDataURL's output is ~33% larger than the same bytes as a
+// Blob), and it's what photoStore.putPhoto actually stores — a photo
+// processed this way never becomes a JSON string at all before it lands
+// in IndexedDB.
+export function resizeImageToBlob(file: File, maxDim = 1200, quality = 0.82): Promise<Blob> {
+  return loadScaledCanvas(file, maxDim).then(
+    (canvas) =>
+      new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode image'))),
+          'image/jpeg',
+          quality
+        );
+      })
+  );
+}
+
+// blob <-> data-URI conversions needed at the two places a stored photo's
+// Blob and a portable base64 string have to cross paths: hydrateStoredPhotos
+// (IndexedDB Blob -> base64, for a self-contained export/Drive backup) and
+// migrateInlinePhotosToIndexedDb (base64 -> Blob, moving existing inline
+// photos out of localStorage).
+// Via arrayBuffer + manual base64 rather than FileReader.readAsDataURL —
+// functionally identical, but only depends on the Blob having a working
+// arrayBuffer() method rather than being recognized as "a real Blob" by
+// whatever realm's FileReader implementation receives it (this matters
+// once a Blob has round-tripped through IndexedDB and back).
+export async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
+}
+
+export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
 }

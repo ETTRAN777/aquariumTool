@@ -46,6 +46,18 @@ import { PRESET_FIELDS } from './presetFields';
 // is the easy part.
 // =========================================================================
 
+// A template's static checklist step. Identical to a real ChecklistTask
+// minus its runtime fields, plus one template-only marker that never
+// reaches a built tank (buildTankFromTemplate strips it): `livestockGate`
+// flags the step that means "the tank is now ready to receive live
+// animals" — the cycle-confirmation step in the templates that have one.
+// A dedicated marker on the step itself, not a label match and not an
+// index into the array, so rewording or reordering a template's steps
+// can't silently break which step livestock sourcing waits on.
+export type TemplateChecklistStep = Omit<ChecklistTask, 'id' | 'done'> & {
+  livestockGate?: true;
+};
+
 export interface TankTemplate {
   id: string;
   name: string;
@@ -63,7 +75,7 @@ export interface TankTemplate {
   // rejecting the whole template.
   minGallons: number;
   customFields: Omit<CustomFieldDef, 'id'>[];
-  checklist: Omit<ChecklistTask, 'id' | 'done'>[];
+  checklist: TemplateChecklistStep[];
   questionnaire?: Question;
 }
 
@@ -1837,7 +1849,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
       { label: 'Layer substrate and place hardscape' },
       { label: 'Fill, install filtration, and plant' },
       { label: 'Begin fishless cycle and daily testing' },
-      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present — retest before trusting it' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present — retest before trusting it', livestockGate: true },
       { label: 'Drip-acclimate and add founding livestock' },
     ],
   },
@@ -1853,7 +1865,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
       { label: 'Source tank, substrate, and hardscape' },
       { label: 'Fill, install filtration, and plant' },
       { label: 'Begin fishless cycle and daily testing' },
-      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present', livestockGate: true },
       { label: 'Acclimate and add livestock' },
       { label: 'Add a breeder box or dense floating cover for fry survival' },
     ],
@@ -1870,7 +1882,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
       { label: 'Source tank, substrate, and hardscape' },
       { label: 'Fill, install filtration, and plant' },
       { label: 'Begin fishless cycle and daily testing' },
-      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present', livestockGate: true },
       { label: 'Research stocking order and add fish gradually' },
     ],
   },
@@ -1886,7 +1898,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
       { label: 'Source tank, substrate, and hardscape' },
       { label: 'Fill, install filtration, and plant' },
       { label: 'Begin fishless cycle and daily testing' },
-      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present', livestockGate: true },
       { label: 'Quarantine the fish before introducing to the display tank' },
       { label: 'Acclimate and add the single centerpiece fish — no tankmates' },
       { label: 'Monitor fin condition and behavior closely for the first two weeks' },
@@ -1925,7 +1937,7 @@ export const TANK_TEMPLATES: TankTemplate[] = [
       { label: 'Aquascape rockwork and add sand bed' },
       { label: 'Fill with mixed saltwater and confirm salinity before adding rock' },
       { label: 'Begin cycle (rock-seeded or fishless) and daily testing' },
-      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present, alkalinity/calcium/magnesium stable' },
+      { label: 'Confirm ammonia = 0, nitrite = 0, nitrate present, alkalinity/calcium/magnesium stable', livestockGate: true },
       { label: 'Add clean-up crew, then corals, then fish — slowest stocking order in the hobby for a reason' },
     ],
   },
@@ -1951,6 +1963,25 @@ function sourcingStepsFor(rosterItems: RosterItem[]): Omit<ChecklistTask, 'id' |
   }));
 }
 
+// Splits generated sourcing steps by whether the item is a live animal —
+// see buildTankFromTemplate for why only livestock gets gated.
+function splitSourcingSteps(rosterItems: RosterItem[]): {
+  upfront: Omit<ChecklistTask, 'id' | 'done'>[];
+  livestock: Omit<ChecklistTask, 'id' | 'done'>[];
+} {
+  return {
+    upfront: sourcingStepsFor(rosterItems.filter((i) => i.category !== 'livestock')),
+    livestock: sourcingStepsFor(rosterItems.filter((i) => i.category === 'livestock')),
+  };
+}
+
+// Strips the template-only marker so it never lands on a real tank's
+// checklist (where it would be an unknown field on a persisted record).
+function toChecklistTask(step: TemplateChecklistStep): ChecklistTask {
+  const { livestockGate: _livestockGate, ...rest } = step;
+  return { ...rest, id: crypto.randomUUID(), done: false };
+}
+
 export function buildTankFromTemplate(
   template: TankTemplate,
   overrides: { name: string; sizeGallons: number; dimensions?: string; style?: string },
@@ -1961,19 +1992,54 @@ export function buildTankFromTemplate(
     id: crypto.randomUUID(),
   }));
 
-  let checklist = template.checklist.map((c) => ({ ...c, id: crypto.randomUUID(), done: false }));
+  let checklist: ChecklistTask[] = template.checklist.map(toChecklistTask);
   if (roster.length > 0) {
     // The template's own first checklist step is always a generic
     // "source everything" catch-all — once the questionnaire has produced
     // real, specific items, granular per-item steps are strictly more
     // useful than that one vague step, so it gets replaced rather than
     // just appended alongside.
-    const sourcingSteps = sourcingStepsFor(roster).map((s) => ({
+    const gateIndexInTemplate = template.checklist.findIndex((c) => c.livestockGate);
+    const staticSteps = checklist.slice(1);
+
+    // Where the generated livestock steps have to wait. Templates that
+    // cycle the tank mark their cycle-confirmation step explicitly; one
+    // without such a step (Planted-Only has none) falls back to its final
+    // step, i.e. "everything else in this plan is done first" — the
+    // closest honest anchor when no cycle step exists to point at. The
+    // marker can never sit on index 0, since that step was just replaced
+    // above; treat that as "no marker" too.
+    const gateOffset = gateIndexInTemplate >= 1 ? gateIndexInTemplate - 1 : staticSteps.length - 1;
+    const gateStep = staticSteps[gateOffset];
+
+    // Only livestock waits: substrate, hardscape, equipment, and plants
+    // all go in BEFORE the tank is filled and cycled, so sourcing them
+    // first is correct. Gating those on the cycle would deadlock the plan
+    // (you can't cycle a tank you haven't bought a filter for). A live
+    // animal is the one thing that must not be sourced before the tank is
+    // ready for it — the previous version prepended every sourcing step
+    // ungated, so "Source [fish]" could be checked off before the tank was
+    // even filled.
+    const toTask = (s: Omit<ChecklistTask, 'id' | 'done'>): ChecklistTask => ({
       ...s,
       id: crypto.randomUUID(),
       done: false,
+    });
+    const sourcing = splitSourcingSteps(roster);
+    const upfrontSteps = sourcing.upfront.map(toTask);
+    const livestockSteps = sourcing.livestock.map((s) => ({
+      ...toTask(s),
+      ...(gateStep ? { dependsOn: [gateStep.id] } : {}),
     }));
-    checklist = [...sourcingSteps, ...checklist.slice(1)];
+
+    checklist = gateStep
+      ? [
+          ...upfrontSteps,
+          ...staticSteps.slice(0, gateOffset + 1),
+          ...livestockSteps,
+          ...staticSteps.slice(gateOffset + 1),
+        ]
+      : [...upfrontSteps, ...livestockSteps, ...staticSteps];
   }
 
   return {

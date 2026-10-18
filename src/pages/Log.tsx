@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue, RosterItem, RosterLink, Milestone } from '../types';
-import { resizeImageToBase64 } from '../lib/storage';
+import { resizeImageToBlob } from '../lib/storage';
+import { putPhoto, deletePhotos, isStoredPhotoRef, photoRefId, makePhotoRef } from '../lib/photoStore';
 import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS, STATUS_LABELS } from '../lib/constants';
 import { builtMilestone } from '../lib/milestones';
 import ConfirmModal from '../components/ConfirmModal';
 import Toast from '../components/Toast';
 import RosterHighlightPicker from '../components/RosterHighlightPicker';
+import TankPhoto from '../components/TankPhoto';
 
 export default function Log() {
   const { activeTank, addLogEntry, updateLogEntry, deleteLogEntry, addMilestone, deleteMilestone } = useData();
@@ -241,7 +243,7 @@ export default function Log() {
                   {entry.photoUrls && entry.photoUrls.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {entry.photoUrls.map((url, i) => (
-                        <img
+                        <TankPhoto
                           key={i}
                           src={url}
                           alt={`${entry.title} photo ${i + 1}`}
@@ -290,7 +292,14 @@ export default function Log() {
         confirmLabel="Delete entry"
         danger
         onConfirm={() => {
-          if (deleteTarget) deleteLogEntry(deleteTarget.id);
+          if (deleteTarget) {
+            deleteLogEntry(deleteTarget.id);
+            // Fire-and-forget: the entry (and its photoUrls) is already gone
+            // from the app's own data the moment deleteLogEntry returns; this
+            // just reclaims the now-orphaned Blobs sitting in IndexedDB.
+            const refs = (deleteTarget.photoUrls ?? []).filter(isStoredPhotoRef);
+            if (refs.length > 0) void deletePhotos(refs.map(photoRefId));
+          }
           setDeleteTarget(null);
         }}
         onCancel={() => setDeleteTarget(null)}
@@ -385,13 +394,54 @@ function EntryForm({
   const [uploading, setUploading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // A photo uploaded during THIS editing session gets its Blob committed to
+  // IndexedDB right away (immediately, not deferred to submit) so it can be
+  // previewed the same way a saved one is — through TankPhoto, which only
+  // knows how to resolve a real reference, not an in-memory Blob nobody's
+  // stored yet. That means it needs its own cleanup path if the session
+  // ends without ever actually saving it: submittedRef distinguishes
+  // "unmounted because the form was submitted" (keep them — see submit()
+  // below) from "unmounted for any other reason" (Cancel, navigating away —
+  // delete them, nothing references them). A photo that was already part
+  // of `initial` before this session started is never touched here; see
+  // submit()'s own separate cleanup for that case.
+  const newPhotoIds = useRef<Set<string>>(new Set());
+  const submittedRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      // Reading .current at cleanup time is the actual point here, not a
+      // bug this lint rule's usual DOM-ref case is guarding against: these
+      // two refs are intentionally mutated throughout the form's lifetime
+      // (by handlePhotos/removePhoto/submit), and cleanup needs whatever
+      // they'd accumulated BY unmount time — copying them into a variable
+      // back at mount time would capture nothing, since neither has been
+      // written to yet when this effect first runs.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!submittedRef.current && newPhotoIds.current.size > 0) {
+        void deletePhotos([...newPhotoIds.current]);
+      }
+    };
+    // Deliberately empty deps — this is a mount/unmount effect, not one
+    // that should re-run when photos or newPhotoIds' contents change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handlePhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setUploading(true);
     try {
-      const results = await Promise.all(files.map((f) => resizeImageToBase64(f)));
-      setPhotos((prev) => [...prev, ...results]);
+      const refs = await Promise.all(
+        files.map(async (f) => {
+          const blob = await resizeImageToBlob(f);
+          const id = crypto.randomUUID();
+          await putPhoto(id, blob);
+          newPhotoIds.current.add(id);
+          return makePhotoRef(id);
+        })
+      );
+      setPhotos((prev) => [...prev, ...refs]);
     } catch {
       setToastMessage('Could not process one of those images.');
     }
@@ -400,7 +450,22 @@ function EntryForm({
   }
 
   function removePhoto(index: number) {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPhotos((prev) => {
+      const removed = prev[index];
+      // Only a photo uploaded THIS session gets deleted immediately —
+      // nothing outside this form's own local state could possibly
+      // reference it yet. A pre-existing photo (from `initial`) might still
+      // be what's saved elsewhere (another log entry never shares an id,
+      // but the user could still Cancel this whole edit) — that one's
+      // removal is only made real at submit time, in the diff below, so
+      // canceling an edit never destroys a photo that was never actually
+      // removed.
+      if (isStoredPhotoRef(removed) && newPhotoIds.current.has(photoRefId(removed))) {
+        newPhotoIds.current.delete(photoRefId(removed));
+        void deletePhotos([photoRefId(removed)]);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   function setCustomValue(fieldId: string, value: CustomFieldValue | undefined) {
@@ -418,6 +483,17 @@ function EntryForm({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
+    submittedRef.current = true;
+    // A pre-existing (from `initial`) stored photo that isn't in the final
+    // `photos` array was genuinely removed during this edit — clean up its
+    // Blob now that the removal is actually committed, rather than at
+    // removePhoto() time, which would have destroyed it even if the whole
+    // edit got canceled afterward.
+    const keptRefs = new Set(photos.filter(isStoredPhotoRef));
+    const droppedRefs = (initial?.photoUrls ?? []).filter(
+      (url) => isStoredPhotoRef(url) && !keptRefs.has(url)
+    );
+    if (droppedRefs.length > 0) void deletePhotos(droppedRefs.map(photoRefId));
     const entry: LogEntry = {
       id: initial?.id ?? crypto.randomUUID(),
       weekLabel: entryLabel.trim() || `Entry ${weekNumber}`,

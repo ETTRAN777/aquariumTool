@@ -1,5 +1,5 @@
 import type { Tank, LogEntry, Milestone, LogPhase } from '../types';
-import { LOG_PHASE_LABELS, CATEGORY_LABELS } from './constants';
+import { LOG_PHASE_LABELS, CATEGORY_LABELS, statusMeetsRequirement } from './constants';
 import { tankLifetimeDuration, formatTankAge } from './duration';
 
 // 15c — schema + functions only, no UI. Everything here is either a pure
@@ -142,7 +142,9 @@ export function recomputeAutoMilestones(tank: Tank): Milestone[] {
   // entry's `additions` array as a deterministic tiebreak for same-date
   // ties (e.g. two plants added in the same entry). The FIRST occurrence
   // of each distinct roster item, in that order, is its milestone; every
-  // occurrence after that for the same item is ignored. major is true
+  // occurrence after that for the same item is ignored. Only occurrences
+  // whose recorded status is "arrived" or later count at all — see the
+  // filter below. major is true
   // for every livestock item, and true for the first non-livestock item
   // to claim each category — "claim" tracked in the same single pass, so
   // there's no separate tiebreak logic needed for the majorness question.
@@ -150,6 +152,20 @@ export function recomputeAutoMilestones(tank: Tank): Milestone[] {
   const occurrences: Occurrence[] = [];
   for (const entry of tank.logs) {
     (entry.additions ?? []).forEach((link, orderInEntry) => {
+      // An item that's only been ordered (or wishlisted, or is still an
+      // idea) hasn't been ADDED to the tank yet — nothing about it has
+      // arrived. Counting it made Timeline announce that an item
+      // "arrives" while its recorded status was still Ordered, a
+      // statement that was flatly false. Skipping these here (rather than
+      // patching the wording) makes buildFallbackDescription's "arrive(s)"
+      // true by construction: no code path can reach it for an item that
+      // hasn't actually arrived. When the item's arrival is logged later,
+      // that later entry becomes its first counted occurrence, so the
+      // milestone lands on the real arrival date — and a full recompute
+      // means an existing milestone anchored to the earlier "Ordered"
+      // entry moves there (or drops, if no arrival has been logged yet)
+      // the next time any log entry is saved.
+      if (!statusMeetsRequirement(link.requiredStatus, 'arrived')) return;
       occurrences.push({ entry, rosterItemId: link.rosterItemId, orderInEntry });
     });
   }

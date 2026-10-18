@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
-import { exportData, serializeBackup, stripPhotos } from '../lib/storage';
+import { exportData, serializeBackup, stripPhotos, formatBytes } from '../lib/storage';
+import Toast from './Toast';
 import { uploadBackup } from '../lib/googleDrive';
 import Waterline from './Waterline';
 import DrivePickerModal from './DrivePickerModal';
@@ -22,14 +23,16 @@ const navItems = [
 ];
 
 export default function Layout() {
-  const { activeTank, data, setActiveTankId } = useData();
+  const { activeTank, data, setActiveTankId, saveFailure, autoFreedStorage, clearAutoFreedStorage } = useData();
   const navigate = useNavigate();
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  function handleExport(selectedTanks: Tank[], stripImages: boolean) {
+  async function handleExport(selectedTanks: Tank[], stripImages: boolean) {
+    setIsExporting(true);
     // Single-tank export gets named for that tank, same as before — but
     // now the content genuinely matches the filename, since previously
     // "Export" always included every tank regardless of the name prefix.
@@ -41,14 +44,18 @@ export default function Layout() {
       tanks: tanksToExport,
     };
     const name = tanksToExport.length === 1 ? tanksToExport[0].name : undefined;
-    exportData(payload, name, stripImages);
-    setExportPickerOpen(false);
+    try {
+      await exportData(payload, name, stripImages);
+      setExportPickerOpen(false);
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   async function handleUploadToDrive() {
     setDriveStatus('uploading');
     try {
-      await uploadBackup(serializeBackup(data));
+      await uploadBackup(await serializeBackup(data));
       setDriveStatus('done');
     } catch (err) {
       console.error(err);
@@ -160,6 +167,46 @@ export default function Layout() {
 
       <Waterline />
 
+      {/* Persistent on purpose (not an auto-dismissing Toast): the failure
+          it reports means recent edits exist only in this tab's memory, and
+          a message that vanishes after five seconds is exactly how that
+          used to go unnoticed. Clears itself once a save succeeds again. */}
+      {saveFailure && (
+        <div className="px-6 md:px-10 pt-6 bg-deepwater-2">
+          <div
+            role="alert"
+            className="card border border-coral/40 px-4 py-3 text-sm text-coral flex flex-col sm:flex-row sm:items-center gap-3"
+          >
+            <p className="flex-1 leading-relaxed">
+              <span className="font-semibold">⚠ Your latest changes aren't being saved.</span>{' '}
+              {saveFailure === 'quota'
+                ? "This browser's storage for the app is completely full — it already tried freeing up space automatically and that wasn't enough. Until more space is freed, refreshing or closing this tab will lose recent changes. Export a backup now, then consider removing an old tank or log entry to make more room."
+                : "This browser is blocking storage for this site (a privacy setting or private browsing can cause this), so nothing you enter can persist. Refreshing or closing this tab will lose it — export a backup to keep your work."}
+            </p>
+            <button
+              onClick={() => setExportPickerOpen(true)}
+              className="btn btn-danger shrink-0 whitespace-nowrap"
+            >
+              Export backup now
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Toast
+        tone="success"
+        message={
+          autoFreedStorage
+            ? `Your browser's storage was almost full, so ${autoFreedStorage.migratedCount} photo${
+                autoFreedStorage.migratedCount === 1 ? '' : 's'
+              } ${autoFreedStorage.migratedCount === 1 ? 'was' : 'were'} automatically moved to free up about ${formatBytes(
+                autoFreedStorage.bytesFreed
+              )} — nothing was lost, and nothing else needs doing.`
+            : null
+        }
+        onDismiss={clearAutoFreedStorage}
+      />
+
       <main className="flex-1 px-6 md:px-10 py-8 bg-deepwater-2">
         <Outlet />
       </main>
@@ -217,6 +264,7 @@ export default function Layout() {
         activeTank={activeTank}
         onExport={handleExport}
         onCancel={() => setExportPickerOpen(false)}
+        isExporting={isExporting}
       />
 
       <DrivePickerModal
