@@ -1,4 +1,4 @@
-import{c as e,g as t,m as n,o as r,r as i,t as a,y as o}from"./index-Q6wQ8FkE.js";var s=o(t(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
+import{c as e,g as t,m as n,o as r,r as i,t as a,y as o}from"./index-Bq3RGLAz.js";var s=o(t(),1),c=`# Tank Tracker — AI Quickstart & Import Guide
 
 This document is written for AI assistants helping someone plan or manage an
 aquarium using this app. It has two jobs: give you real, current context on
@@ -177,6 +177,25 @@ they already know.
 - Log entries can link back to Schedule tasks completed that same day
   (see below) — that linkage is automatic in both directions, whichever
   gets created first.
+- An entry's date is editable in the app, not forced to the moment it's
+  saved — it can be backdated (not forward-dated) to when something
+  actually happened, since this date drives Timeline placement, phase
+  detection, and chart/cadence spacing. For a JSON-generated or -edited
+  plan, set \`date\` to whatever real timestamp is actually known for
+  that entry; don't default it to "now" the way the UI does for a
+  brand-new entry typed in live.
+- If an entry's \`additions\` (📦 roster links) assert a status that
+  outranks a linked \`RosterItem\`'s current \`status\`, the live app
+  advances that roster item's status to match the moment the entry is
+  saved through the UI — forward only, never a downgrade, and never a
+  retroactive effect from editing or deleting an old entry afterward.
+  This sync only runs on a live save through the app, not on JSON
+  import — importing a plan sets \`logs\` and \`roster\` directly, so a
+  generated plan's \`additions\` and the matching \`RosterItem.status\`
+  values are NOT reconciled against each other on import. Keep them
+  consistent yourself: if a log entry's \`additions\` says an item
+  reached \`"arrived"\`, that item's own \`status\` should already say
+  \`"arrived"\` too, not something earlier.
 
 **Timeline**
 - A proportional, phase-tagged history of the tank's whole build: a
