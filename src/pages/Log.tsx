@@ -3,6 +3,7 @@ import { useData } from '../lib/DataContext';
 import type { LogEntry, WaterParams, CustomFieldDef, CustomFieldValue, RosterItem, RosterLink, Milestone } from '../types';
 import { resizeImageToBlob } from '../lib/storage';
 import { putPhoto, deletePhotos, isStoredPhotoRef, photoRefId, makePhotoRef } from '../lib/photoStore';
+import { todayIso, toIsoDate, parseIsoDate } from '../lib/date';
 import { MOOD_LABELS, LOG_PHASE_ORDER, LOG_PHASE_LABELS, STATUS_LABELS } from '../lib/constants';
 import { builtMilestone } from '../lib/milestones';
 import ConfirmModal from '../components/ConfirmModal';
@@ -97,7 +98,14 @@ export default function Log() {
               roster={activeTank.roster}
               builtByEntryId={builtByEntryId}
               onSubmit={(updated) => {
-                updateLogEntry({ ...updated, id: entry.id, date: entry.date, weekLabel: entry.weekLabel });
+                // No `date: entry.date` override here anymore — that used to
+                // force every edit back to its original timestamp no matter
+                // what. The form itself now owns resolving the real date
+                // (see resolveEntryDate below), including the "left
+                // unchanged" case that already preserves the original
+                // precise timestamp, so an edit that never touches the date
+                // field behaves exactly as before.
+                updateLogEntry({ ...updated, id: entry.id, weekLabel: entry.weekLabel });
                 setEditingId(null);
               }}
               onMarkBuilt={markTankBuilt}
@@ -369,6 +377,22 @@ function EntryForm({
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [entryLabel, setEntryLabel] = useState(initial?.weekLabel ?? `Entry ${weekNumber}`);
+  // Local-calendar-day string (YYYY-MM-DD) driving the date <input>.
+  // Defaults to today for a new entry, or the entry's own day for an
+  // edit — using toIsoDate (local components), not initial.date sliced
+  // raw, so this agrees with every other "what day is this" read in the
+  // app (see lib/date.ts's own comment on the UTC-day rollover bug this
+  // sidesteps).
+  const [entryDate, setEntryDate] = useState(() =>
+    initial?.date ? toIsoDate(new Date(initial.date)) : todayIso()
+  );
+  // Starts collapsed to a plain "Today" link for the common case (a new
+  // entry, or an edit of an entry that's already dated today) so the
+  // form's overall shape doesn't change for anyone who never needs this.
+  // Starts already expanded, though, if the entry being edited is NOT
+  // today — never hide a real backdated date behind a "Today" label that
+  // would be a lie.
+  const [dateExpanded, setDateExpanded] = useState(() => entryDate !== todayIso());
   const [body, setBody] = useState(initial?.body ?? '');
   const [mood, setMood] = useState<LogEntry['mood']>(initial?.mood);
   const [phase, setPhase] = useState<LogEntry['phase']>(initial?.phase);
@@ -480,10 +504,35 @@ function EntryForm({
     });
   }
 
+  // Resolves the <input type="date"> day string back into the real
+  // stored timestamp. Two cases:
+  // - The day wasn't actually changed from the entry's own original day
+  //   (true for every edit that doesn't touch the date field, and for a
+  //   brand-new entry left on its today-default): keep the EXACT original
+  //   timestamp rather than rebuilding it, so an edit that only changes
+  //   the title doesn't quietly rewrite a precise created-at instant down
+  //   to noon.
+  // - The day WAS changed (backdating, or a brand-new entry moved off
+  //   today): anchor the new timestamp to local noon, not local
+  //   midnight — deliberately, to stay far from the UTC-day-rollover trap
+  //   toIsoDate/parseIsoDate's own comments warn about (a near-midnight
+  //   local time can serialize into the adjacent UTC calendar day).
+  function resolveEntryDate(dayStr: string, previous?: string): string {
+    if (previous && toIsoDate(new Date(previous)) === dayStr) return previous;
+    const d = parseIsoDate(dayStr);
+    d.setHours(12, 0, 0, 0);
+    return d.toISOString();
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
     submittedRef.current = true;
+    // Defensive clamp against a future date — belt-and-suspenders on top
+    // of the input's own `max`, which a browser's date picker generally
+    // enforces but isn't a hard guarantee (e.g. manual keyboard entry in
+    // some browsers).
+    const safeDate = entryDate > todayIso() ? todayIso() : entryDate;
     // A pre-existing (from `initial`) stored photo that isn't in the final
     // `photos` array was genuinely removed during this edit — clean up its
     // Blob now that the removal is actually committed, rather than at
@@ -497,7 +546,7 @@ function EntryForm({
     const entry: LogEntry = {
       id: initial?.id ?? crypto.randomUUID(),
       weekLabel: entryLabel.trim() || `Entry ${weekNumber}`,
-      date: initial?.date ?? new Date().toISOString(),
+      date: resolveEntryDate(safeDate, initial?.date),
       title: title.trim(),
       body: body.trim(),
       mood,
@@ -523,8 +572,37 @@ function EntryForm({
   return (
     <>
     <form onSubmit={submit} className={`card p-5 space-y-4 ${editing ? 'border-amber/40' : ''}`}>
+      {dateExpanded ? (
+        <div>
+          <label className="field-label">Date</label>
+          <input
+            type="date"
+            value={entryDate}
+            max={todayIso()}
+            onChange={(e) => setEntryDate(e.target.value)}
+            className="field font-mono text-sm w-auto"
+            autoFocus
+          />
+          <p className="text-[11px] text-foam-dim/60 mt-1">
+            Back-date this to when something actually happened, not when
+            you got around to writing it up — Timeline, build-stage
+            detection, and chart spacing all key off this date.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-foam-dim/60">
+          <button
+            type="button"
+            onClick={() => setDateExpanded(true)}
+            className="text-amber hover:underline underline-offset-2 font-medium"
+          >
+            Today
+          </button>
+          {' — '}defaults to today. Click to back-date this entry.
+        </p>
+      )}
       <input
-        placeholder="Entry label (e.g. &quot;Entry 12&quot;, a date, whatever's useful to you)"
+        placeholder="Entry label (e.g. &quot;Entry 12&quot;, a short title of its own, whatever's useful to you)"
         value={entryLabel}
         onChange={(e) => setEntryLabel(e.target.value)}
         className="field text-xs text-foam-dim"

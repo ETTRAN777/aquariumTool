@@ -1,8 +1,50 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { AppData, Tank, RosterItem, LogEntry, CustomFieldDef, ScheduleTask, Milestone } from '../types';
+import type {
+  AppData,
+  Tank,
+  RosterItem,
+  RosterLink,
+  LogEntry,
+  CustomFieldDef,
+  ScheduleTask,
+  Milestone,
+  SourcingStatus,
+} from '../types';
 import { loadData, saveData, migrateInlinePhotosToIndexedDb, type SaveFailureReason } from './storage';
 import { todayIso, addDays, toIsoDate } from './date';
 import { recomputeAutoMilestones } from './milestones';
+import { STATUS_ORDER } from './constants';
+
+// 3i — the Log ↔ Roster sync question, settled: one-way, forward-only,
+// no retroactive effect. A log entry's 📦 roster link (RosterLink,
+// {rosterItemId, requiredStatus}) asserts "this item reached at least
+// this status by now." If requiredStatus outranks the item's CURRENT
+// RosterItem.status in STATUS_ORDER, the roster item advances to match —
+// in the same save as the log entry, not a separate recompute pass.
+// Equal-or-behind is a silent no-op, never a downgrade: a direct
+// Roster-page edit always keeps the last word going backward, which is
+// what makes two independent writers to RosterItem.status safe instead
+// of a fight over who's right. Index comparison (not a strict required-
+// sequence) is deliberate too — a log entry can legitimately assert a
+// status several steps ahead of the item's current one (bought in
+// person, straight into the tank the same day: wishlist -> acclimating,
+// skipping ordered AND arrived in one write) and that's exactly as valid
+// as a single-step advance. Never mutates its arguments.
+function syncRosterStatusForward(
+  roster: RosterItem[],
+  links: RosterLink[] | undefined
+): { roster: RosterItem[]; changes: { itemName: string; status: SourcingStatus }[] } {
+  if (!links || links.length === 0) return { roster, changes: [] };
+  const changes: { itemName: string; status: SourcingStatus }[] = [];
+  const nextRoster = roster.map((item) => {
+    const link = links.find((l) => l.rosterItemId === item.id);
+    if (!link) return item;
+    if (STATUS_ORDER.indexOf(link.requiredStatus) <= STATUS_ORDER.indexOf(item.status)) return item;
+    changes.push({ itemName: item.name, status: link.requiredStatus });
+    return { ...item, status: link.requiredStatus };
+  });
+  return { roster: nextRoster, changes };
+}
 
 interface DataContextValue {
   data: AppData;
@@ -23,6 +65,14 @@ interface DataContextValue {
   // "a new event with the same photo count," since the count alone isn't
   // a reliable identity for the event.
   clearAutoFreedStorage: () => void;
+  // Set briefly whenever saving a log entry pushes one or more roster
+  // items' sourcing status forward (see syncRosterStatusForward above) —
+  // Layout surfaces this as a transient, no-action-needed toast, same
+  // pattern as autoFreedStorage. Null the rest of the time, including
+  // while a log entry's roster links don't advance anything (already
+  // caught up, or no links at all).
+  rosterStatusSync: { itemName: string; status: SourcingStatus }[] | null;
+  clearRosterStatusSync: () => void;
   activeTank: Tank | undefined;
   updateTank: (tankOrUpdater: Tank | ((prev: Tank) => Tank)) => void;
   createTank: (tank: Tank) => void;
@@ -54,6 +104,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [autoFreedStorage, setAutoFreedStorage] = useState<
     { migratedCount: number; bytesFreed: number } | null
   >(null);
+  const [rosterStatusSync, setRosterStatusSync] = useState<
+    { itemName: string; status: SourcingStatus }[] | null
+  >(null);
+  function clearRosterStatusSync() {
+    setRosterStatusSync(null);
+  }
 
   useEffect(() => {
     // A full quota almost always means photos — they're the one thing in
@@ -197,6 +253,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // works regardless of which happens first.
   function addLogEntry(entry: LogEntry) {
     if (!activeTank) return;
+    // Populated inside the updater below, read once it returns — see
+    // syncRosterStatusForward's own comment for why this is forward-only
+    // and index-based rather than a strict step-by-step sequence.
+    let syncChanges: { itemName: string; status: SourcingStatus }[] = [];
     updateTank((tank) => {
       const entryDay = toIsoDate(new Date(entry.date));
       const alreadyLinkedIds = new Set(tank.logs.flatMap((l) => l.completedScheduleTaskIds ?? []));
@@ -212,6 +272,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
           : entry;
 
+      const { roster: nextRoster, changes } = syncRosterStatusForward(tank.roster, finalEntry.additions);
+      syncChanges = changes;
+
       // 15c/15d: silent, no confirmation step — milestones are fully
       // recomputed from the tank's POST-save log state on every save
       // (add/update/delete), not appended incrementally. This is what
@@ -220,27 +283,55 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // rather than being permanently stuck. See recomputeAutoMilestones'
       // own comment for exactly what's preserved (hand-edited title/
       // description/major) vs. recomputed fresh.
-      const nextLogs = [finalEntry, ...tank.logs];
+      //
+      // Re-sorted by date, newest first, not just prepended — before 3i's
+      // backdating, every new entry WAS "now," so prepending and sorting
+      // newest-first always agreed and nothing needed an explicit sort.
+      // A backdated entry breaks that: it can land chronologically before
+      // entries already in the array. Two real consumers silently trust
+      // "array order already is newest-first" rather than sorting
+      // themselves — this page's own list rendering (Log.tsx, plain
+      // array order, no sort) and Charts.tsx's `[...logs].reverse()`
+      // "chronological order" trick — so the invariant has to be upheld
+      // here, once, rather than fixed in every place that assumed it.
+      const nextLogs = [finalEntry, ...tank.logs].sort((a, b) => b.date.localeCompare(a.date));
       return {
         ...tank,
+        roster: nextRoster,
         logs: nextLogs,
         milestones: recomputeAutoMilestones({ ...tank, logs: nextLogs }),
       };
     });
+    if (syncChanges.length > 0) setRosterStatusSync(syncChanges);
   }
 
   function updateLogEntry(entry: LogEntry) {
     if (!activeTank) return;
+    let syncChanges: { itemName: string; status: SourcingStatus }[] = [];
     updateTank((tank) => {
-      const nextLogs = tank.logs.map((l) => (l.id === entry.id ? entry : l));
+      const { roster: nextRoster, changes } = syncRosterStatusForward(tank.roster, entry.additions);
+      syncChanges = changes;
+      // Same re-sort as addLogEntry, same reason — editing an entry's
+      // date (3l) can move it past its neighbors, and a plain in-place
+      // replace wouldn't reflect that in array order.
+      const nextLogs = tank.logs
+        .map((l) => (l.id === entry.id ? entry : l))
+        .sort((a, b) => b.date.localeCompare(a.date));
       return {
         ...tank,
+        roster: nextRoster,
         logs: nextLogs,
         milestones: recomputeAutoMilestones({ ...tank, logs: nextLogs }),
       };
     });
+    if (syncChanges.length > 0) setRosterStatusSync(syncChanges);
   }
 
+  // Deliberately does NOT touch roster status — the ratchet only ever
+  // pushes forward on save (see syncRosterStatusForward); deleting (or,
+  // above, editing away) the entry that pushed it has zero retroactive
+  // effect, same precedent as item 9's completion history. If a status
+  // genuinely needs to come back down, that's a manual Roster-page edit.
   function deleteLogEntry(id: string) {
     if (!activeTank) return;
     updateTank((tank) => {
@@ -367,6 +458,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         saveFailure,
         autoFreedStorage,
         clearAutoFreedStorage: () => setAutoFreedStorage(null),
+        rosterStatusSync,
+        clearRosterStatusSync,
         activeTank,
         updateTank,
         createTank,

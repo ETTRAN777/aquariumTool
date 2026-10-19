@@ -9,6 +9,7 @@ import DrivePickerModal from './DrivePickerModal';
 import ConfirmModal from './ConfirmModal';
 import ExportPickerModal from './ExportPickerModal';
 import TankSwitcher from './TankSwitcher';
+import { STATUS_LABELS } from '../lib/constants';
 import type { Tank, AppData } from '../types';
 
 const navItems = [
@@ -23,7 +24,16 @@ const navItems = [
 ];
 
 export default function Layout() {
-  const { activeTank, data, setActiveTankId, saveFailure, autoFreedStorage, clearAutoFreedStorage } = useData();
+  const {
+    activeTank,
+    data,
+    setActiveTankId,
+    saveFailure,
+    autoFreedStorage,
+    clearAutoFreedStorage,
+    rosterStatusSync,
+    clearRosterStatusSync,
+  } = useData();
   const navigate = useNavigate();
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
@@ -205,6 +215,22 @@ export default function Layout() {
             : null
         }
         onDismiss={clearAutoFreedStorage}
+      />
+
+      {/* 3i's forward-only roster sync, surfaced — same no-action-needed
+          Toast pattern as autoFreedStorage above. One item: names it
+          directly; several at once (one log entry can link more than one
+          roster item): a short joined list, still one line. */}
+      <Toast
+        tone="success"
+        message={
+          rosterStatusSync && rosterStatusSync.length > 0
+            ? `Roster updated: ${rosterStatusSync
+                .map((c) => `${c.itemName} → ${STATUS_LABELS[c.status]}`)
+                .join(', ')}`
+            : null
+        }
+        onDismiss={clearRosterStatusSync}
       />
 
       <main className="flex-1 px-6 md:px-10 py-8 bg-deepwater-2">
