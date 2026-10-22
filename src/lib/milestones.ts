@@ -165,7 +165,12 @@ export function recomputeAutoMilestones(tank: Tank): Milestone[] {
       // means an existing milestone anchored to the earlier "Ordered"
       // entry moves there (or drops, if no arrival has been logged yet)
       // the next time any log entry is saved.
-      if (!statusMeetsRequirement(link.requiredStatus, 'arrived')) return;
+      // Updated again: "added" now means actually placed in the tank —
+      // acclimating or later — not merely arrived. An item sitting in a
+      // box (or in the filter media bag, like crushed coral) hasn't been
+      // added to anything yet, and counting it made Timeline's "first
+      // item added" land on whatever happened to be bought first.
+      if (!statusMeetsRequirement(link.requiredStatus, 'acclimating')) return;
       occurrences.push({ entry, rosterItemId: link.rosterItemId, orderInEntry });
     });
   }
@@ -202,7 +207,13 @@ export function recomputeAutoMilestones(tank: Tank): Milestone[] {
       type: 'roster-addition',
       relatedRosterItemIds: [occ.rosterItemId],
       linkedLogEntryId: occ.entry.id,
-      major: existing?.major ?? major,
+      // Preserved only while the milestone is still anchored to the SAME
+      // log entry. If it moved (its first counted occurrence is now a
+      // different entry, e.g. after the arrived/added rule change or a
+      // backdated edit), the old flag described a different moment and is
+      // recomputed — otherwise a milestone that relocates keeps a stale
+      // major/not-major forever and can never claim its category.
+      major: existing && existing.linkedLogEntryId === occ.entry.id ? existing.major : major,
     });
   }
 
