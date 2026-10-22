@@ -105,7 +105,15 @@ export default function Log() {
                 // unchanged" case that already preserves the original
                 // precise timestamp, so an edit that never touches the date
                 // field behaves exactly as before.
-                updateLogEntry({ ...updated, id: entry.id, weekLabel: entry.weekLabel });
+                //
+                // `weekLabel: entry.weekLabel` used to be here too, for the
+                // same "preserve the original" reasoning — except `updated`
+                // already carries whatever the form's own label field
+                // resolved to (including a real edit to it), so this was
+                // unconditionally throwing away any change to the entry's
+                // label/title and silently restoring the pre-edit one.
+                // Caught directly, the same way the date override was.
+                updateLogEntry({ ...updated, id: entry.id });
                 setEditingId(null);
               }}
               onMarkBuilt={markTankBuilt}
@@ -775,7 +783,15 @@ function EntryForm({
           <div className="grid grid-cols-4 gap-2 mt-3">
             {photos.map((p, i) => (
               <div key={i} className="relative group">
-                <img
+                {/* TankPhoto, not a bare <img> — `photos` holds real
+                    stored-photo refs (see the comment above, and
+                    makePhotoRef in handlePhotos), not resolvable URLs. A
+                    bare <img src={p}> here just shows a broken image for
+                    every photo, new upload or pre-existing, the moment
+                    IndexedDB-backed storage is actually in play — this
+                    was that exact gap, despite the comment above already
+                    describing TankPhoto as the intended path. */}
+                <TankPhoto
                   src={p}
                   className="rounded-md border border-moss/30 aspect-square object-cover"
                   alt=""

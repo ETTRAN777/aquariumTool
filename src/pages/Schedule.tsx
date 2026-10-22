@@ -2,7 +2,14 @@ import { useMemo, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { todayIso, toIsoDate, parseIsoDate, addDays } from '../lib/date';
-import { daysUntil, formatDue, effectiveDueDate, scheduleAnchorDate, TONE_CLASSES } from '../lib/schedule';
+import {
+  daysUntil,
+  formatDue,
+  effectiveDueDate,
+  scheduleAnchorDate,
+  missedCycleCount,
+  TONE_CLASSES,
+} from '../lib/schedule';
 import type { ScheduleTask, Tank } from '../types';
 import Toast from '../components/Toast';
 
@@ -59,11 +66,14 @@ function buildMonthGrid(year: number, month: number): Date[] {
 // separately from 'actual' because completing a recurring task rolls its
 // one real occurrence forward past today — without this, the day it was
 // completed on would show nothing at all, which read as the completion
-// having silently failed rather than having happened.
+// having silently failed rather than having happened. 'failed' is v2.5:
+// a tracked task's occurrence that was explicitly marked failed rather
+// than completed — only tracked tasks can ever produce one (see
+// occurrencesInRange).
 interface CalendarOccurrence {
   task: ScheduleTask;
   date: string;
-  kind: 'actual' | 'preview' | 'completed';
+  kind: 'actual' | 'preview' | 'completed' | 'failed';
 }
 
 function occurrencesInRange(
@@ -94,17 +104,31 @@ function occurrencesInRange(
         if (d > cap) break;
         if (d >= rangeStart) occurrences.push({ task: t, date: d, kind: 'preview' });
       }
-      // The day this task was last completed doesn't otherwise appear
-      // anywhere — completing it rolled dueDate/effective past today, so
-      // without this the completed day would just show nothing, and
-      // completing looked identical to the task silently vanishing.
-      // Guarded against equaling `effective` for the (currently
-      // unreachable in practice, since completion always rolls strictly
-      // past today — see completeScheduleTask's do/while) case of a
-      // hand-edited dueDate landing back on the same day as the last
-      // completion, which would otherwise double up as both an 'actual'
-      // and a 'completed' entry for one occurrence.
-      if (
+      // A tracked task's full completionHistory — every resolved
+      // occurrence, not just the most recent — so a backlog that's been
+      // resolved one cycle at a time (see resolveScheduleTask in
+      // DataContext) actually shows up as several distinct marks on the
+      // calendar rather than only ever the last one. An untracked task
+      // has no completionHistory at all, so it falls back to the
+      // original single-dot lastCompletedDate behavior unchanged.
+      if (t.trackCompletionHistory && t.completionHistory) {
+        for (const entry of t.completionHistory) {
+          if (entry.date === effective) continue; // same guard as below
+          if (entry.date >= rangeStart && entry.date <= rangeEnd) {
+            occurrences.push({ task: t, date: entry.date, kind: entry.outcome });
+          }
+        }
+      } else if (
+        // The day this task was last completed doesn't otherwise appear
+        // anywhere — completing it rolled dueDate/effective past today, so
+        // without this the completed day would just show nothing, and
+        // completing looked identical to the task silently vanishing.
+        // Guarded against equaling `effective` for the (currently
+        // unreachable in practice, since completion always rolls strictly
+        // past today — see resolveScheduleTask's do/while) case of a
+        // hand-edited dueDate landing back on the same day as the last
+        // completion, which would otherwise double up as both an 'actual'
+        // and a 'completed' entry for one occurrence.
         t.lastCompletedDate &&
         t.lastCompletedDate !== effective &&
         t.lastCompletedDate >= rangeStart &&
@@ -134,7 +158,8 @@ export default function Schedule() {
 }
 
 function ScheduleView({ activeTank }: { activeTank: Tank }) {
-  const { addScheduleTask, updateScheduleTask, deleteScheduleTask, completeScheduleTask } = useData();
+  const { addScheduleTask, updateScheduleTask, deleteScheduleTask, completeScheduleTask, failScheduleTask } =
+    useData();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [justLinked, setJustLinked] = useState<string | null>(null);
@@ -161,6 +186,12 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
       setJustLinked(task.id);
       setTimeout(() => setJustLinked((cur) => (cur === task.id ? null : cur)), 3500);
     }
+  }
+
+  // No justLinked handling here — failing a task didn't actually happen,
+  // so there's nothing to attach to today's log.
+  function handleFail(task: ScheduleTask) {
+    failScheduleTask(task.id);
   }
 
   const active = schedule.filter((t) => !t.done);
@@ -330,25 +361,37 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
                   {d.getDate()}
                 </span>
                 <div className="flex flex-wrap gap-0.5">
-                  {shown.map((occ, i) => (
-                    <span
-                      key={`${occ.task.id}-${i}`}
-                      className={
-                        occ.kind === 'actual'
-                          ? `w-1.5 h-1.5 rounded-full ${DOT_CLASSES[formatDue(occ.date).tone]}`
-                          : occ.kind === 'completed'
-                          ? 'w-1.5 h-1.5 rounded-full bg-moss' // same solid "done" green used for a checked-off Checklist item elsewhere in the app — deliberately not moss-light, which the preview dot below already uses for a different meaning (outline) and the "later" tone dot uses for solid, so a completed day can't read as either
-                          : 'w-1.5 h-1.5 rounded-full border border-moss-light bg-transparent'
-                      }
-                      title={
-                        occ.kind === 'actual'
-                          ? occ.task.label
-                          : occ.kind === 'completed'
-                          ? `${occ.task.label} (completed)`
-                          : `${occ.task.label} (upcoming)`
-                      }
-                    />
-                  ))}
+                  {shown.map((occ, i) =>
+                    occ.kind === 'completed' || occ.kind === 'failed' ? (
+                      // Icon badge, not a plain dot — a resolved tracked
+                      // occurrence gets an actual check or X, legible at
+                      // a glance rather than just "something happened,
+                      // check the tooltip." See the design exploration:
+                      // this was the recommended option over a bigger
+                      // dot, a corner flag, or a ring, specifically
+                      // because every other shape on this calendar
+                      // already means something else.
+                      <span
+                        key={`${occ.task.id}-${i}`}
+                        title={`${occ.task.label} (${occ.kind === 'completed' ? 'completed' : 'failed'})`}
+                        className={`w-3 h-3 rounded-full inline-flex items-center justify-center text-[7px] leading-none font-bold text-foam ${
+                          occ.kind === 'completed' ? 'bg-moss' : 'bg-coral'
+                        }`}
+                      >
+                        {occ.kind === 'completed' ? '✓' : '✕'}
+                      </span>
+                    ) : (
+                      <span
+                        key={`${occ.task.id}-${i}`}
+                        className={
+                          occ.kind === 'actual'
+                            ? `w-1.5 h-1.5 rounded-full ${DOT_CLASSES[formatDue(occ.date).tone]}`
+                            : 'w-1.5 h-1.5 rounded-full border border-moss-light bg-transparent'
+                        }
+                        title={occ.kind === 'actual' ? occ.task.label : `${occ.task.label} (upcoming)`}
+                      />
+                    )
+                  )}
                   {overflow > 0 && (
                     <span className="text-[9px] text-foam-dim leading-none">+{overflow}</span>
                   )}
@@ -367,7 +410,16 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
             recurrence (preview)
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-moss inline-block" /> completed
+            <span className="w-3 h-3 rounded-full bg-moss inline-flex items-center justify-center text-[6px] text-foam font-bold">
+              ✓
+            </span>{' '}
+            completed
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-3 h-3 rounded-full bg-coral inline-flex items-center justify-center text-[6px] text-foam font-bold">
+              ✕
+            </span>{' '}
+            failed
           </span>
         </p>
       </div>
@@ -415,15 +467,29 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
             // why this exists at all. Read-only, like the preview case
             // below: the real occurrence to act on is elsewhere now (its
             // dueDate already rolled forward), not this day.
-            if (occ.kind === 'completed') {
+            if (occ.kind === 'completed' || occ.kind === 'failed') {
+              const isFail = occ.kind === 'failed';
               const next = effectiveDueDate(task, anchorDate);
+              // A 'staysDue' task's fail doesn't roll next forward at
+              // all — next is just its own still-current, still-overdue
+              // dueDate, so "Next due" would read as nonsense here ("next
+              // due 3d overdue" right next to the X that just caused it).
+              // staysDue is only possible when the occurrence itself is
+              // a fail, so this only ever hides the caption on that case.
+              const staysDueFail = isFail && task.onMissedCycle === 'staysDue';
               return (
-                <li key={`${task.id}-completed`} className="card p-3 opacity-70">
+                <li key={`${task.id}-${occ.kind}`} className="card p-3 opacity-70">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-moss text-sm">✓</span>
-                    <p className="text-sm text-foam-dim line-through">{task.label}</p>
-                    <span className="pill text-[11px] py-0.5 px-2 bg-moss/15 text-foam-dim">
-                      done this day
+                    <span className={isFail ? 'text-coral text-sm' : 'text-moss text-sm'}>
+                      {isFail ? '✕' : '✓'}
+                    </span>
+                    <p className={`text-sm text-foam-dim ${isFail ? '' : 'line-through'}`}>{task.label}</p>
+                    <span
+                      className={`pill text-[11px] py-0.5 px-2 ${
+                        isFail ? 'bg-coral/15 text-coral' : 'bg-moss/15 text-foam-dim'
+                      }`}
+                    >
+                      {isFail ? 'marked failed this day' : 'done this day'}
                     </span>
                     {/* Only reachable here now, not on the 'actual' card below —
                         a recurring task's occurrence has already rolled forward
@@ -431,20 +497,29 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
                         previously dead code there (see handleComplete: the
                         state update and this note land in the same render,
                         but by then the occurrence for `today` isn't `actual`
-                        anymore, it's this 'completed' entry). */}
-                    {justLinked === task.id && (
+                        anymore, it's this 'completed' entry). Never shown for
+                        a fail — failing didn't actually happen. */}
+                    {!isFail && justLinked === task.id && (
                       <span className="text-[11px] text-moss-light">🔗 linked to today's log</span>
                     )}
                   </div>
-                  {next && (
-                    <p className="text-[11px] text-foam-dim/50 mt-1.5">
-                      Next due{' '}
-                      {(() => {
-                        const due = formatDue(next);
-                        return due.tone === 'later' ? parseIsoDate(next).toLocaleDateString() : due.label.toLowerCase();
-                      })()}
-                      .
+                  {staysDueFail ? (
+                    <p className="text-[11px] text-coral/80 mt-1.5">
+                      Still due — marking it failed doesn't move this one on.
                     </p>
+                  ) : (
+                    next && (
+                      <p className="text-[11px] text-foam-dim/50 mt-1.5">
+                        Next due{' '}
+                        {(() => {
+                          const due = formatDue(next);
+                          return due.tone === 'later'
+                            ? parseIsoDate(next).toLocaleDateString()
+                            : due.label.toLowerCase();
+                        })()}
+                        .
+                      </p>
+                    )
                   )}
                 </li>
               );
@@ -501,17 +576,31 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
 
             const due = formatDue(occ.date);
             const deleting = pendingDeleteId === task.id;
+            const tracked = !!task.trackCompletionHistory && !!task.recurrenceDays;
+            const missed = tracked ? missedCycleCount(task) : 0;
 
             return (
               <li key={task.id} className="card p-4">
                 <div className="flex items-start gap-3">
+                  {/* v2.5: a solid-moss rectangular button, not the
+                      round amber-bordered circle used everywhere else on
+                      this page — a deliberate new look for this update
+                      rather than matching the older convention, so it
+                      reads as one pair with the Fail button beside it. */}
                   <button
                     onClick={() => handleComplete(task)}
-                    aria-label="Mark done"
-                    className="mt-0.5 shrink-0 w-6 h-6 rounded-full border-2 border-amber flex items-center justify-center text-xs hover:bg-amber/20 transition-colors"
+                    className="btn btn-secondary shrink-0 text-xs py-1.5 px-3"
                   >
-                    ✓
+                    ✓ Complete
                   </button>
+                  {tracked && (
+                    <button
+                      onClick={() => handleFail(task)}
+                      className="btn btn-outline-danger shrink-0 text-xs py-1.5 px-3"
+                    >
+                      ✕ Fail
+                    </button>
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -522,6 +611,14 @@ function ScheduleView({ activeTank }: { activeTank: Tank }) {
                       {task.recurrenceDays && (
                         <span className="pill text-[11px] py-0.5 px-2 bg-moss/15 text-foam-dim">
                           ↻ every {task.recurrenceDays}d
+                        </span>
+                      )}
+                      {missed > 1 && (
+                        <span
+                          title="Each Complete or Fail only resolves one cycle — click resolves the oldest first."
+                          className="pill text-[11px] py-0.5 px-2 bg-amber/15 text-amber"
+                        >
+                          ⚠ {missed} missed cycles
                         </span>
                       )}
                       {task.endDate && (
@@ -682,6 +779,12 @@ function TaskForm({
   const [customDays, setCustomDays] = useState(
     isRecurring && !matchingPreset ? String(initial?.recurrenceDays) : ''
   );
+  const [trackCompletionHistory, setTrackCompletionHistory] = useState(
+    initial?.trackCompletionHistory ?? false
+  );
+  const [onMissedCycle, setOnMissedCycle] = useState<'moveOn' | 'staysDue'>(
+    initial?.onMissedCycle ?? 'moveOn'
+  );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const preset = RECURRENCE_PRESETS.find((p) => p.label === presetLabel)!;
@@ -707,6 +810,14 @@ function TaskForm({
       endDate: recurrenceDays && endDate ? endDate : undefined,
       done: initial?.done,
       lastCompletedDate: initial?.lastCompletedDate,
+      // trackCompletionHistory/onMissedCycle only mean anything for a
+      // recurring task — dropped alongside endDate above if the task
+      // isn't (or is no longer) recurring, same reasoning. completionHistory
+      // itself is never editable here; it's only ever written by
+      // resolveScheduleTask, so it's simply carried forward untouched.
+      trackCompletionHistory: recurrenceDays ? trackCompletionHistory : undefined,
+      onMissedCycle: recurrenceDays && trackCompletionHistory ? onMissedCycle : undefined,
+      completionHistory: initial?.completionHistory,
     });
   }
 
@@ -782,6 +893,40 @@ function TaskForm({
             Leave blank to repeat indefinitely. Once set, the series retires itself the first
             time completing it would roll past this date.
           </p>
+        </div>
+      )}
+      {recurrenceDays && (
+        <div className="space-y-2 pt-1 border-t border-moss/15">
+          <label className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              checked={trackCompletionHistory}
+              onChange={(e) => setTrackCompletionHistory(e.target.checked)}
+              className="accent-amber"
+            />
+            <span className="text-sm text-foam">Track completion history</span>
+          </label>
+          <p className="text-[11px] text-foam-dim/60">
+            Adds a Fail option alongside Complete, and marks each resolved occurrence with a
+            check or an X on the calendar instead of just rolling the due date forward silently.
+          </p>
+          {trackCompletionHistory && (
+            <div className="pt-1">
+              <p className="field-label">When a cycle is missed</p>
+              <select
+                value={onMissedCycle}
+                onChange={(e) => setOnMissedCycle(e.target.value as 'moveOn' | 'staysDue')}
+                className="field sm:w-72"
+              >
+                <option value="moveOn">Move on — it can't be made up (e.g. daily misting)</option>
+                <option value="staysDue">Stay due — keep it due until it's actually done (e.g. water change)</option>
+              </select>
+              <p className="text-[11px] text-foam-dim/60 mt-1">
+                Only changes what Fail does. "Move on" rolls to the next cycle like Complete
+                would; "Stay due" leaves the due date exactly where it is.
+              </p>
+            </div>
+          )}
         </div>
       )}
       <div className="flex gap-2">

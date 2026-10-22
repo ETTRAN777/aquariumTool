@@ -90,6 +90,7 @@ interface DataContextValue {
   updateScheduleTask: (task: ScheduleTask) => void;
   deleteScheduleTask: (id: string) => void;
   completeScheduleTask: (id: string) => void;
+  failScheduleTask: (id: string) => void;
   addMilestone: (milestone: Milestone) => void;
   updateMilestone: (milestone: Milestone) => void;
   deleteMilestone: (id: string) => void;
@@ -406,7 +407,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // so the log shows what maintenance happened that day. No matching log
   // entry means no log entry gets created; the schedule update still
   // happens on its own.
-  function completeScheduleTask(id: string) {
+  // Shared by completeScheduleTask and failScheduleTask below — Complete
+  // and Fail differ only in `outcome` and in what Fail does to dueDate
+  // for a 'staysDue' tracked task, so the dueDate-advancing, endDate-
+  // retirement, and log-linking logic stays in one place rather than two
+  // near-identical copies that could drift.
+  //
+  // An untracked task keeps the exact old behavior: fallen behind, it
+  // jumps straight to the first occurrence on/after today, silently,
+  // with nothing recorded. A tracked task instead resolves exactly ONE
+  // cycle per call — however many cycles are actually overdue, each
+  // click (Complete or Fail) only ever advances past the single oldest
+  // one, appending a completionHistory entry for it. That's deliberate,
+  // not a missing feature: it's what turns "fell behind by 3 cycles"
+  // into 3 individually-resolvable prompts (one per click, oldest first)
+  // instead of one click silently absorbing all three — see
+  // missedCycleCount in lib/schedule.ts for the badge that counts them.
+  //
+  // 'staysDue' (only meaningful on Fail, for a tracked recurring task)
+  // deliberately does NOT advance dueDate at all: the task stays due
+  // exactly where it was, because for a task like a water change, a
+  // missed cycle is a problem that should get made up, not a cycle to
+  // move past. 'moveOn' (the default, used by Complete always and by
+  // Fail unless onMissedCycle is 'staysDue') rolls forward one cycle
+  // normally — for a task like daily misting, a missed day genuinely
+  // can't be made up, so there's nothing to stay due about.
+  function resolveScheduleTask(id: string, outcome: 'completed' | 'failed') {
     if (!activeTank) return;
     updateTank((tank) => {
       const task = tank.schedule.find((t) => t.id === id);
@@ -416,38 +442,76 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const schedule = tank.schedule.map((t) => {
         if (t.id !== id) return t;
-        if (t.recurrenceDays) {
-          let next = t.dueDate;
+
+        if (!t.recurrenceDays) {
+          // One-off: Fail has no later cycle to move on to or stay due
+          // against, so it's a no-op (the UI doesn't offer it for
+          // one-off tasks in the first place — see Schedule.tsx).
+          if (outcome === 'failed') return t;
+          return { ...t, done: true, lastCompletedDate: today };
+        }
+
+        const tracked = !!t.trackCompletionHistory;
+        const resolvedDate = t.dueDate;
+        const completionHistory = tracked
+          ? [...(t.completionHistory ?? []), { date: resolvedDate, outcome }]
+          : t.completionHistory;
+
+        const staysDue = tracked && outcome === 'failed' && t.onMissedCycle === 'staysDue';
+        if (staysDue) {
+          return { ...t, completionHistory };
+        }
+
+        let next = resolvedDate;
+        if (tracked) {
+          // Resolve exactly this one cycle, regardless of how far behind
+          // the task has fallen — see the function comment above.
+          next = addDays(resolvedDate, t.recurrenceDays);
+        } else {
           do {
             next = addDays(next, t.recurrenceDays);
           } while (next < today);
-          // Rolling forward would push past the series' own end date —
-          // treat this completion as the last one instead of producing
-          // a dueDate beyond the boundary the user set.
-          if (t.endDate && next > t.endDate) {
-            return { ...t, done: true, lastCompletedDate: today };
-          }
-          return { ...t, dueDate: next, lastCompletedDate: today };
         }
-        return { ...t, done: true, lastCompletedDate: today };
+
+        // Rolling forward would push past the series' own end date —
+        // treat this resolution as the last one instead of producing a
+        // dueDate beyond the boundary the user set.
+        if (t.endDate && next > t.endDate) {
+          return outcome === 'completed'
+            ? { ...t, done: true, lastCompletedDate: today, completionHistory }
+            : { ...t, done: true, completionHistory };
+        }
+        return outcome === 'completed'
+          ? { ...t, dueDate: next, lastCompletedDate: today, completionHistory }
+          : { ...t, dueDate: next, completionHistory };
       });
 
       // l.date is a full timestamp (new Date().toISOString()), so it's
       // converted to its own local calendar day rather than sliced as a
       // UTC string — otherwise a log made late in the evening could
       // compare as "yesterday" against today's local date and silently
-      // fail to link.
+      // fail to link. Only a real Complete links to today's log — a Fail
+      // didn't actually happen, so there's nothing to attach.
       const matchingLog = tank.logs.find((l) => toIsoDate(new Date(l.date)) === today);
-      const logs = matchingLog
-        ? tank.logs.map((l) =>
-            l.id === matchingLog.id
-              ? { ...l, completedScheduleTaskIds: [...(l.completedScheduleTaskIds ?? []), id] }
-              : l
-          )
-        : tank.logs;
+      const logs =
+        outcome === 'completed' && matchingLog
+          ? tank.logs.map((l) =>
+              l.id === matchingLog.id
+                ? { ...l, completedScheduleTaskIds: [...(l.completedScheduleTaskIds ?? []), id] }
+                : l
+            )
+          : tank.logs;
 
       return { ...tank, schedule, logs };
     });
+  }
+
+  function completeScheduleTask(id: string) {
+    resolveScheduleTask(id, 'completed');
+  }
+
+  function failScheduleTask(id: string) {
+    resolveScheduleTask(id, 'failed');
   }
 
   return (
@@ -477,6 +541,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateScheduleTask,
         deleteScheduleTask,
         completeScheduleTask,
+        failScheduleTask,
         addMilestone,
         updateMilestone,
         deleteMilestone,

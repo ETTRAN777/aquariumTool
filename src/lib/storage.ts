@@ -554,6 +554,36 @@ function normalizeScheduleTask(
     warnings.push(`${contextLabel}'s last-completed date was an unexpected type in the import — dropped.`);
   }
 
+  // v2.5 — same UI-constrained treatment as the fields above:
+  // trackCompletionHistory is a checkbox, onMissedCycle a fixed select,
+  // completionHistory never hand-edited at all (only ever written by
+  // resolveScheduleTask), so every shape outside what the UI can
+  // actually produce gets dropped with a warning rather than trusted.
+  let trackCompletionHistory = typeof raw.trackCompletionHistory === 'boolean' ? raw.trackCompletionHistory : undefined;
+  if (raw.trackCompletionHistory !== undefined && trackCompletionHistory === undefined) {
+    warnings.push(`${contextLabel}'s completion-tracking flag was an unexpected type in the import — dropped.`);
+  }
+  let onMissedCycle: 'moveOn' | 'staysDue' | undefined =
+    raw.onMissedCycle === 'moveOn' || raw.onMissedCycle === 'staysDue' ? raw.onMissedCycle : undefined;
+  if (raw.onMissedCycle !== undefined && onMissedCycle === undefined) {
+    warnings.push(`${contextLabel}'s missed-cycle setting was an unexpected value in the import — dropped.`);
+  }
+  let completionHistory: { date: string; outcome: 'completed' | 'failed' }[] | undefined;
+  if (Array.isArray(raw.completionHistory)) {
+    const entries = raw.completionHistory.filter(
+      (e: any) =>
+        e &&
+        typeof e.date === 'string' &&
+        (e.outcome === 'completed' || e.outcome === 'failed')
+    );
+    if (entries.length > 0) completionHistory = entries;
+    if (entries.length !== raw.completionHistory.length) {
+      warnings.push(`${contextLabel}'s completion history had malformed entries in the import — those were dropped.`);
+    }
+  } else if (raw.completionHistory !== undefined) {
+    warnings.push(`${contextLabel}'s completion history was an unexpected type in the import — dropped.`);
+  }
+
   const task: ScheduleTask = {
     id,
     label,
@@ -563,6 +593,9 @@ function normalizeScheduleTask(
     ...(endDate !== undefined ? { endDate } : {}),
     ...(done !== undefined ? { done } : {}),
     ...(lastCompletedDate !== undefined ? { lastCompletedDate } : {}),
+    ...(trackCompletionHistory !== undefined ? { trackCompletionHistory } : {}),
+    ...(onMissedCycle !== undefined ? { onMissedCycle } : {}),
+    ...(completionHistory !== undefined ? { completionHistory } : {}),
   };
 
   return { task, warnings };

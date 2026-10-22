@@ -473,6 +473,21 @@ body {
     filter: brightness(1.1);
   }
 
+  /* Coral-outline — Fail, next to .btn-secondary's solid-moss Complete.
+     New with v2.5's Schedule update rather than reusing .btn-danger's
+     solid coral fill: Fail is a real, equally-weighted action here (not
+     a destructive one like delete), so it gets its own look instead of
+     borrowing delete's. */
+  .btn-outline-danger {
+    background: transparent;
+    color: var(--color-coral);
+    border: 1.5px solid var(--color-coral);
+    font-weight: 600;
+  }
+  .btn-outline-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-coral) 15%, transparent);
+  }
+
   .btn-ghost {
     background: transparent;
     color: var(--color-foam-dim);

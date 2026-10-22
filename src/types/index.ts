@@ -222,6 +222,16 @@ export interface LogEntry {
   completedScheduleTaskIds?: string[];
 }
 
+// One resolved occurrence of a tracked recurring task — see
+// ScheduleTask.completionHistory. `date` is the occurrence's own due date
+// (not necessarily the day it was actually resolved on, though the two
+// are almost always the same in practice), which is what lets the
+// calendar place a check or an X on the exact day the occurrence was for.
+export interface ScheduleCompletionEntry {
+  date: string; // ISO date
+  outcome: 'completed' | 'failed';
+}
+
 // A maintenance reminder: either recurring (water changes, dosing, feeding —
 // `recurrenceDays` set) or one-off (`recurrenceDays` absent, `done` tracks
 // completion). Recurring tasks never really finish — completing one just
@@ -237,6 +247,29 @@ export interface ScheduleTask {
   endDate?: string; // ISO date — optional. Recurring only; caps how far the series projects/repeats.
   done?: boolean; // one-off tasks only, or a recurring task that's passed its endDate
   lastCompletedDate?: string; // ISO date of most recent completion, if any
+  // v2.5 — opt-in per-task completion tracking (recurring tasks only).
+  // Off by default so every existing task keeps today's plain behavior:
+  // completing one that's fallen behind silently jumps dueDate to the
+  // next occurrence on/after today, with no record of what was skipped.
+  // Turning this on instead resolves exactly one cycle per Complete/Fail
+  // click — however many cycles are actually overdue, each gets its own
+  // click rather than being jumped over — and keeps a record of every
+  // resolved occurrence in completionHistory.
+  trackCompletionHistory?: boolean;
+  // Only read when trackCompletionHistory is on. What a Fail does to the
+  // next occurrence: 'moveOn' (the default) rolls forward one cycle just
+  // like Complete would, for a task that genuinely can't be made up after
+  // the fact (a missed daily misting). 'staysDue' leaves dueDate exactly
+  // where it is — the task stays due/overdue — for a task where missing it
+  // is the real problem and it should get made up, not skipped (a water
+  // change). This is a property of the task, not a global rule: the same
+  // app can have both kinds of recurring task at once.
+  onMissedCycle?: 'moveOn' | 'staysDue';
+  // Every resolved occurrence of a tracked task, oldest first. Each entry
+  // is independent of dueDate, so backlog occurrences (ones older than
+  // the task's current dueDate) can be resolved in any order without
+  // disturbing it — see missedCycleCount in lib/schedule.ts.
+  completionHistory?: ScheduleCompletionEntry[];
 }
 
 export interface Tank {

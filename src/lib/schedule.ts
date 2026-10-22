@@ -97,6 +97,23 @@ export function scheduleAnchorDate(tank: Tank): string | undefined {
   return builtMilestone(tank)?.date ?? tank.startDate;
 }
 
+// How many cycles of a tracked recurring task are currently sitting
+// between its own dueDate and today — purely informational (a "3 missed"
+// badge), never used to decide how many to resolve at once. A tracked
+// task always resolves exactly one cycle per Complete/Fail click, oldest
+// first — see resolveScheduleTask in DataContext — so this is just what
+// that badge counts, not a list of independently-clickable rows.
+export function missedCycleCount(task: ScheduleTask, today: string = todayIso()): number {
+  if (!task.recurrenceDays || !task.trackCompletionHistory) return 0;
+  let count = 0;
+  let d = task.dueDate;
+  while (d < today) {
+    count++;
+    d = addDays(d, task.recurrenceDays);
+  }
+  return count;
+}
+
 // The single most relevant task to show somewhere with room for exactly
 // one — the most overdue task if anything's overdue, otherwise the
 // soonest upcoming one. Undefined if the schedule is empty, every task

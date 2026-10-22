@@ -692,8 +692,17 @@ function buildSlides(tank: Tank, inventory: ReturnType<typeof computeStoryInvent
           <p className="text-foam-dim text-sm mb-6">— for now. Come back once there's more to tell.</p>
           {closingPhotos.length > 0 && (
             <div className="flex gap-3 justify-center flex-wrap">
+              {/* TankPhoto, not a bare <img> — a photoUrls entry can be an
+                  IndexedDB-stored-photo reference (see photoStore.ts),
+                  which isn't a URL an <img> can load directly; it has to
+                  be resolved to a real object URL first. The milestone
+                  reel and roster-highlight slides above already go
+                  through TankPhoto for exactly this reason — this slide
+                  was the one spot in the file still using a raw <img>,
+                  which is why its thumbnails showed as broken images
+                  specifically for photos stored in IndexedDB. */}
               {closingPhotos.map((url, i) => (
-                <img
+                <TankPhoto
                   key={i}
                   src={url}
                   alt=""

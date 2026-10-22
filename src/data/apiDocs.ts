@@ -610,6 +610,9 @@ you have specific intervals in mind?"*
 | recurrenceDays | number | no | Omit for a one-off reminder. Set to the repeat interval in days (7 for weekly, 14 for biweekly, etc.) |
 | endDate | string | no | ISO date. Recurring only — caps how far the series repeats; omit for an indefinitely-repeating reminder. Only include if the plan states a clear end point (e.g. "50% weekly water changes for the first month") |
 | done | boolean | no | Only meaningful for one-off tasks; omit or \`false\` for a new plan |
+| trackCompletionHistory | boolean | no | v2.5. Opt-in, per task — turns on a Fail action alongside Complete and a full calendar history of check/X marks instead of just the latest. This is a workflow preference the user sets in the UI itself, not something to infer from the plan's wording — leave it out (default off) when generating a new plan |
+| onMissedCycle | string | no | One of \`"moveOn"\`, \`"staysDue"\`. Only read when \`trackCompletionHistory\` is true. Same reasoning as above — leave it out when generating a new plan |
+| completionHistory | array | no | \`{date: string, outcome: "completed" \\| "failed"}[]\`. Only ever written by the app itself as tasks get resolved — never include this when generating a new plan |
 
 ## Milestone
 
