@@ -107,9 +107,15 @@ they already know.
   livestock item's Mouth Size is compared against every other livestock
   item's Adult Size across the whole roster. An item whose mouth is big
   enough to threaten something smaller gets flagged ⚠ Predation Risk,
-  expandable to the specific list of what it endangers. A per-item
-  override excludes a false positive (e.g. Otocinclus) from the check
-  entirely.
+  expandable to the specific list of what it endangers. A second, lesser
+  tier runs the same scan against each item's Newborn Size instead of its
+  Adult Size: 🐣 Predation Warning (amber) means adults are too big for
+  that mouth but the offspring aren't — conditional on the young and the
+  predator actually sharing the tank, so it's informational, never an
+  exclusion. A Warning only shows where Risk doesn't (a newborn can't be
+  larger than its adult, so a Risk pair would always fire it too). A
+  per-item override excludes a false positive (e.g. Otocinclus) from both
+  checks entirely.
 - Four more checks run the same way — silent unless the relevant trait(s)
   are actually set, never inferred or defaulted:
   - **Fin-nipping risk** — pairwise, same shape as predation: any item
@@ -493,7 +499,8 @@ plant, or livestock.
 | waterParamTargets | object, keyed by water param | no | Compatibility page fields — see ParamTarget below. Only meaningful for `livestock`/`plant` items. **Only include real, researched values** — see the warning under "Generation guidelines" below |
 | mouthSizeMm | number | no | Livestock only. Drives the automatic Predation Risk computation — see below |
 | adultSizeIn | number | no | Livestock only. Drives the automatic Predation Risk computation — see below |
-| predatorRiskOverride | boolean | no | Livestock only. `true` excludes this item's mouth size from flagging other, smaller items as at risk (the in-app example is Otocinclus — a moderate mouth size that isn't actually a shrimp predator) |
+| juvenileSizeMm | number | no | Livestock only. Newborn/hatchling size in **millimeters** (same unit as `mouthSizeMm`, not inches). Drives the lesser, amber Predation Warning (offspring) — see below. Leave unset for anything that doesn't breed in an aquarium |
+| predatorRiskOverride | boolean | no | Livestock only. `true` excludes this item's mouth size from flagging other, smaller items as at risk or as a warning (the in-app example is Otocinclus — a moderate mouth size that isn't actually a shrimp predator) |
 | traits | array of RosterItemTrait | no | Compatibility page's free-form researched facts (temperament, fin-nipper, light needs, etc.) — see RosterItemTrait below |
 
 ### ParamTarget
@@ -681,7 +688,7 @@ A notable, dated moment in the tank's build (e.g. "Cycling complete," "Founding 
   toward the total while it stays at that status, so it's safe to include
   even with a rough cost estimate attached.
 
-- **Don't fabricate `waterParamTargets`, `mouthSizeMm`, `adultSizeIn`, or
+- **Don't fabricate `waterParamTargets`, `mouthSizeMm`, `adultSizeIn`, `juvenileSizeMm`, or
   `traits` values.** These are meant to be genuinely researched facts about
   a specific species or plant, not estimates. If the user's plan already
   states one directly (e.g. "guppies, pH 7-8"), include it. Otherwise leave
