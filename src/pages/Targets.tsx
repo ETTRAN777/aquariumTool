@@ -8,6 +8,7 @@ import {
   checkMineralLoadConsistency,
   buildMineralLoadResearchPrompt,
   computePredationThreats,
+  computePredationWarnings,
   computeAggressionThreats,
   hasShoalingIssue,
   hasPlantHerbivoryRisk,
@@ -47,6 +48,7 @@ export default function Targets() {
   const [copiedMineralPrompt, setCopiedMineralPrompt] = useState(false);
   const [copiedStockingPrompt, setCopiedStockingPrompt] = useState(false);
   const [threatListOpenId, setThreatListOpenId] = useState<string | null>(null);
+  const [warningListOpenId, setWarningListOpenId] = useState<string | null>(null);
   const [aggressionListOpenId, setAggressionListOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TargetableCategory | 'all'>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
@@ -151,6 +153,13 @@ export default function Targets() {
     updateRosterItem({
       ...item,
       adultSizeIn: rawValue === '' ? undefined : Number(rawValue),
+    });
+  }
+
+  function setJuvenileSize(item: RosterItem, rawValue: string) {
+    updateRosterItem({
+      ...item,
+      juvenileSizeMm: rawValue === '' ? undefined : Number(rawValue),
     });
   }
 
@@ -366,6 +375,8 @@ export default function Targets() {
             const isExpanded = expandedId === item.id;
             const threats = computePredationThreats(tank.roster, item);
             const isThreatListOpen = threatListOpenId === item.id;
+            const predationWarnings = computePredationWarnings(tank.roster, item);
+            const isWarningListOpen = warningListOpenId === item.id;
             const aggressionThreats = computeAggressionThreats(tank.roster, item);
             const isAggressionListOpen = aggressionListOpenId === item.id;
             const shoalingIssue = hasShoalingIssue(item);
@@ -393,6 +404,11 @@ export default function Targets() {
                       {threats.length > 0 && (
                         <span className="pill text-[11px] py-0.5 px-2 bg-coral/20 text-coral border border-coral/40 font-semibold">
                           ⚠ Predation Risk
+                        </span>
+                      )}
+                      {predationWarnings.length > 0 && (
+                        <span className="pill text-[11px] py-0.5 px-2 bg-amber/20 text-amber border border-amber/40 font-semibold">
+                          🐣 Predation Warning
                         </span>
                       )}
                       {aggressionThreats.length > 0 && (
@@ -465,6 +481,36 @@ export default function Targets() {
                           <ul className="px-3 pb-3 space-y-1">
                             {threats.map((t) => (
                               <li key={t.preyId} className="text-xs text-coral/90">
+                                • {t.preyName}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {predationWarnings.length > 0 && (
+                      <div className="rounded-lg border border-amber/40 bg-amber/10 overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setWarningListOpenId(isWarningListOpen ? null : item.id)
+                          }
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+                        >
+                          <span className="text-xs text-amber">
+                            <span className="font-semibold">🐣 Predation Warning</span> — adults
+                            of these are too big for this stock's mouth, but their newborns aren't.
+                            Only matters if the young and this stock share the tank
+                          </span>
+                          <span className="text-[11px] text-amber shrink-0">
+                            {isWarningListOpen ? 'Hide ▲' : `Show ${predationWarnings.length} ▼`}
+                          </span>
+                        </button>
+                        {isWarningListOpen && (
+                          <ul className="px-3 pb-3 space-y-1">
+                            {predationWarnings.map((t) => (
+                              <li key={t.preyId} className="text-xs text-amber/90">
                                 • {t.preyName}
                               </li>
                             ))}
@@ -555,7 +601,7 @@ export default function Targets() {
                     {item.category === 'livestock' && (
                       <div>
                         <p className="field-label mb-2">Predation risk</p>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="text-[11px] text-foam-dim block mb-1">
                               Mouth Size (mm)
@@ -582,6 +628,19 @@ export default function Targets() {
                               className="field text-xs px-2 py-1.5"
                             />
                           </div>
+                          <div>
+                            <label className="text-[11px] text-foam-dim block mb-1">
+                              Newborn Size (mm)
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={item.juvenileSizeMm ?? ''}
+                              onChange={(e) => setJuvenileSize(item, e.target.value)}
+                              className="field text-xs px-2 py-1.5"
+                            />
+                          </div>
                         </div>
                         <label className="flex items-center gap-2 mt-2 text-[11px] text-foam-dim">
                           <input
@@ -589,8 +648,9 @@ export default function Targets() {
                             checked={item.predatorRiskOverride ?? false}
                             onChange={() => togglePredatorOverride(item)}
                           />
-                          Exclude this item's mouth size from the predation check (e.g.
-                          Otocinclus — a moderate mouth size that isn't actually a predation threat)
+                          Exclude this item's mouth size from the predation checks, both Risk and
+                          Warning (e.g. Otocinclus — a moderate mouth size that isn't actually a
+                          predation threat)
                         </label>
                       </div>
                     )}

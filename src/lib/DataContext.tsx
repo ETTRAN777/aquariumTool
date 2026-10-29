@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   AppData,
   Tank,
@@ -11,6 +11,8 @@ import type {
   SourcingStatus,
 } from '../types';
 import { loadData, saveData, migrateInlinePhotosToIndexedDb, type SaveFailureReason } from './storage';
+import { deletePhotos } from './photoStore';
+import { collectPhotoRefIds, droppedPhotoIds } from './photoRefs';
 import { todayIso, addDays, toIsoDate } from './date';
 import { recomputeAutoMilestones } from './milestones';
 import { STATUS_ORDER } from './constants';
@@ -112,6 +114,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setRosterStatusSync(null);
   }
 
+  // The photo references the last SUCCESSFULLY SAVED data held. Once a save
+  // lands, any reference that was in the previous saved data and isn't in
+  // this one is unreachable, so its Blob gets deleted. Keyed to saved data,
+  // not to in-memory state: if a save fails, the stored copy still points
+  // at the old photos, and deleting them then would leave a reload with
+  // dangling references.
+  const savedPhotoIds = useRef<Set<string> | null>(null);
+
   useEffect(() => {
     // A full quota almost always means photos — they're the one thing in
     // this app's data that gets genuinely large — and moving them to
@@ -127,12 +137,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     (async () => {
       const result = saveData(data);
       if (result.ok) {
+        const current = collectPhotoRefIds(data);
+        const previous = savedPhotoIds.current;
+        savedPhotoIds.current = current;
+        if (previous) {
+          const dropped = droppedPhotoIds(previous, current);
+          if (dropped.length > 0) void deletePhotos(dropped).catch(() => {});
+        }
         if (!cancelled) setSaveFailure(null);
         return;
       }
       if (result.reason === 'quota') {
+        const referencedBefore = collectPhotoRefIds(data);
         const migration = await migrateInlinePhotosToIndexedDb(data);
-        if (cancelled) return;
+        if (cancelled) {
+          // The migration already wrote its Blobs, but this run's result is
+          // being thrown away (the data changed underneath it, or React ran
+          // the effect twice), so nothing will ever reference them.
+          const created = droppedPhotoIds(collectPhotoRefIds(migration.data), referencedBefore);
+          if (created.length > 0) void deletePhotos(created).catch(() => {});
+          return;
+        }
         if (migration.migratedCount > 0) {
           setAutoFreedStorage({
             migratedCount: migration.migratedCount,

@@ -291,6 +291,43 @@ export function computePredationThreats(roster: RosterItem[], predator: RosterIt
   return threats;
 }
 
+// The lesser tier: same predator-centric full scan, but comparing this
+// predator's mouth against each other livestock item's NEWBORN size
+// (juvenileSizeMm) instead of its adult size. Risk means "an adult of
+// this species is edible"; Warning means "adults are fine, but offspring
+// probably won't survive" — a difference in certainty, not in how much
+// anyone should care, because it only ever happens if the predator and
+// the prey's young actually coexist in the tank (not modeled; the UI says
+// so). A prey item already caught by Risk is skipped on purpose — a
+// newborn can never be larger than its adult, so every Risk pair would
+// also fire here, and stacking both on one pair is noise, not
+// information. The same predatorRiskOverride that silences Risk silences
+// this too (one switch for "this mouth size isn't a real threat").
+// Informational only — it must never be treated as an exclusion by
+// anything that reasons about stocking (see Item 5).
+export function computePredationWarnings(roster: RosterItem[], predator: RosterItem): PredationThreat[] {
+  if (
+    predator.category !== 'livestock' ||
+    predator.predatorRiskOverride ||
+    predator.mouthSizeMm === undefined
+  ) {
+    return [];
+  }
+
+  const alreadyRisk = new Set(computePredationThreats(roster, predator).map((t) => t.preyId));
+  const warnings: PredationThreat[] = [];
+  for (const other of roster) {
+    if (other.id === predator.id || other.category !== 'livestock' || other.juvenileSizeMm === undefined) {
+      continue;
+    }
+    if (alreadyRisk.has(other.id)) continue;
+    if (other.juvenileSizeMm < predator.mouthSizeMm) {
+      warnings.push({ preyId: other.id, preyName: other.name });
+    }
+  }
+  return warnings;
+}
+
 // Shared lookup — traits are matched by their exact preset label string,
 // same as everywhere else traits get read (there's no separate stable id
 // linking a RosterItemTrait back to its TargetTraitPreset).
@@ -581,6 +618,11 @@ ${bullets.join('\n')}`;
         'Typical adult size (inches)*'
       ),
       verifyOrResearch(
+        item.juvenileSizeMm !== undefined ? `${item.juvenileSizeMm} mm` : undefined,
+        'Typical newborn/hatchling size',
+        'Typical newborn/hatchling size (mm)* — size at birth or hatching (a single number), relevant for assessing predation risk to offspring; say "not applicable" if it doesn\'t breed in aquariums'
+      ),
+      verifyOrResearch(
         minGroupTrait !== undefined ? formatTraitValue(minGroupTrait) : undefined,
         'Minimum group/shoal size',
         'Minimum group/shoal size this species actually needs to thrive*, or "not a shoaling species" if that\'s genuinely not a thing for it'
@@ -627,6 +669,7 @@ ${bullets.join('\n')}`;
       tdsSaved ||
       item.mouthSizeMm !== undefined ||
       item.adultSizeIn !== undefined ||
+      item.juvenileSizeMm !== undefined ||
       minGroupTrait !== undefined ||
       minLengthTrait !== undefined ||
       minWidthTrait !== undefined ||

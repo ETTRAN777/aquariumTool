@@ -55,6 +55,14 @@ export interface RosterItem {
   // one shared unit — the comparison itself converts, see lib/targets.ts.
   mouthSizeMm?: number;
   adultSizeIn?: number;
+  // Livestock-only. Size at birth/hatching, in millimeters (same unit as
+  // mouthSizeMm so the two compare directly, with no inches conversion —
+  // shrimplets are ~0.1 in, which is an awkward number to type). Drives
+  // the lesser, amber Predation Warning: a predator's mouth against this
+  // item's NEWBORNS rather than its adults. Left unset for anything that
+  // doesn't breed in an aquarium (e.g. nerites in freshwater) — an unset
+  // value means "no warning", never a default.
+  juvenileSizeMm?: number;
   // true = exclude this item's mouth size from the tank-wide predation-risk
   // calculation entirely, so it can't flag OTHER items as at risk. For
   // edge cases where mouth size alone overstates the threat — Otocinclus

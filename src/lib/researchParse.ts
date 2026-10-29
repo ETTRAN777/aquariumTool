@@ -20,7 +20,7 @@ import type { CustomFieldType, RosterItem, WaterParams } from '../types';
 // the real basis for matching, confirmed against a live response before
 // this was written, not assumed.
 
-export type ParsedFieldKind = 'waterParam' | 'mouthSize' | 'adultSize' | 'trait';
+export type ParsedFieldKind = 'waterParam' | 'mouthSize' | 'adultSize' | 'juvenileSize' | 'trait';
 
 export interface ParsedAnswer {
   raw: string; // exact matched cell/line — what "view source" shows
@@ -34,7 +34,7 @@ export interface ParsedAnswer {
 }
 
 export interface ParsedField extends ParsedAnswer {
-  key: string; // stable id: waterParam key, 'mouthSizeMm'/'adultSizeIn', or trait label
+  key: string; // stable id: waterParam key, 'mouthSizeMm'/'adultSizeIn'/'juvenileSizeMm', or trait label
   kind: ParsedFieldKind;
   displayLabel: string;
   paramKey?: keyof WaterParams;
@@ -51,6 +51,7 @@ type FieldAlias =
   | { keys: string[]; kind: 'waterParam'; param: keyof WaterParams }
   | { keys: string[]; kind: 'mouthSize' }
   | { keys: string[]; kind: 'adultSize' }
+  | { keys: string[]; kind: 'juvenileSize' }
   | { keys: string[]; kind: 'trait'; label: string; type: CustomFieldType };
 
 const WATER_PARAM_ALIASES: FieldAlias[] = [
@@ -70,6 +71,21 @@ const WATER_PARAM_ALIASES: FieldAlias[] = [
 const LIVESTOCK_ALIASES: FieldAlias[] = [
   { keys: ['typical adult mouth size', 'adult mouth size', 'mouth size'], kind: 'mouthSize' },
   { keys: ['typical adult size', 'adult size'], kind: 'adultSize' },
+  // Matches buildResearchPrompt's newborn/hatchling line. "Not applicable"
+  // is a first-class answer here (a species that doesn't breed in an
+  // aquarium has no newborn size to enter) and is handled by the shared
+  // not-applicable path, never coerced to a number.
+  {
+    keys: [
+      'typical newborn/hatchling size',
+      'newborn/hatchling size',
+      'typical newborn size',
+      'newborn size',
+      'hatchling size',
+      'typical hatchling size',
+    ],
+    kind: 'juvenileSize',
+  },
   {
     keys: [
       'minimum group size to thrive',

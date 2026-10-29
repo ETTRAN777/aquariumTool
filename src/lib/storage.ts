@@ -259,6 +259,10 @@ function normalizeRosterItem(
   if (raw.adultSizeIn !== undefined && adultSizeIn === undefined) {
     warnings.push(`"${name}"'s adult size was an unexpected type in the import — dropped.`);
   }
+  let juvenileSizeMm = typeof raw.juvenileSizeMm === 'number' && Number.isFinite(raw.juvenileSizeMm) ? raw.juvenileSizeMm : undefined;
+  if (raw.juvenileSizeMm !== undefined && juvenileSizeMm === undefined) {
+    warnings.push(`"${name}"'s newborn size was an unexpected type in the import — dropped.`);
+  }
   let predatorRiskOverride = typeof raw.predatorRiskOverride === 'boolean' ? raw.predatorRiskOverride : undefined;
   if (raw.predatorRiskOverride !== undefined && predatorRiskOverride === undefined) {
     warnings.push(`"${name}"'s predator-risk override was an unexpected type in the import — dropped.`);
@@ -283,6 +287,7 @@ function normalizeRosterItem(
     ...(waterParamTargets !== undefined ? { waterParamTargets } : {}),
     ...(mouthSizeMm !== undefined ? { mouthSizeMm } : {}),
     ...(adultSizeIn !== undefined ? { adultSizeIn } : {}),
+    ...(juvenileSizeMm !== undefined ? { juvenileSizeMm } : {}),
     ...(predatorRiskOverride !== undefined ? { predatorRiskOverride } : {}),
     ...(raw.traits !== undefined ? { traits: raw.traits } : {}),
   };

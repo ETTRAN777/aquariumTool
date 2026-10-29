@@ -7,6 +7,7 @@ import {
   computeParamStatus,
   checkMineralLoadConsistency,
   computePredationThreats,
+  computePredationWarnings,
   computeAggressionThreats,
   hasShoalingIssue,
   hasPlantHerbivoryRisk,
@@ -172,6 +173,13 @@ function buildRisksSection(tank: Tank): string {
     const threats = computePredationThreats(tank.roster, item);
     if (threats.length > 0) {
       itemFlags.push(`Predation risk to: ${threats.map((t) => t.preyName).join(', ')}`);
+    }
+
+    const predationWarnings = computePredationWarnings(tank.roster, item);
+    if (predationWarnings.length > 0) {
+      itemFlags.push(
+        `Predation warning (newborns only, if they share the tank) to: ${predationWarnings.map((t) => t.preyName).join(', ')}`
+      );
     }
 
     const aggressionThreats = computeAggressionThreats(tank.roster, item);

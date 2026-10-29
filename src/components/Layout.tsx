@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { exportData, serializeBackup, stripPhotos, formatBytes } from '../lib/storage';
@@ -10,6 +10,7 @@ import ConfirmModal from './ConfirmModal';
 import ExportPickerModal from './ExportPickerModal';
 import TankSwitcher from './TankSwitcher';
 import { STATUS_LABELS } from '../lib/constants';
+import { ensureLocalStorageCapMeasured } from '../lib/storageUsage';
 import type { Tank, AppData } from '../types';
 
 const navItems = [
@@ -35,6 +36,13 @@ export default function Layout() {
     clearRosterStatusSync,
   } = useData();
   const navigate = useNavigate();
+
+  // One-time, idle-time measurement of this browser's localStorage limit
+  // for Settings' storage meter. A no-op once a number has been recorded —
+  // see lib/storageUsage.ts.
+  useEffect(() => {
+    void ensureLocalStorageCapMeasured();
+  }, []);
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { PRESET_FIELDS } from '../data/presetFields';
@@ -6,7 +6,16 @@ import type { CustomFieldDef, CustomFieldType } from '../types';
 import { NAME_MAX_LENGTH, STYLE_MAX_LENGTH, closestStandardDimensions } from '../lib/constants';
 import ConfirmModal from '../components/ConfirmModal';
 import { migrateInlinePhotosToIndexedDb, formatBytes } from '../lib/storage';
-import { isStoredPhotoRef } from '../lib/photoStore';
+import { isStoredPhotoRef, sumPhotoBytes, listPhotoIds, deletePhotos } from '../lib/photoStore';
+import { collectPhotoRefIds } from '../lib/photoRefs';
+import {
+  TYPICAL_LOCAL_STORAGE_CAP,
+  ensureLocalStorageCapMeasured,
+  getOriginEstimate,
+  localStorageUsedUnits,
+  readCachedCap,
+  type MeasuredCap,
+} from '../lib/storageUsage';
 
 const TYPE_LABELS: Record<CustomFieldType, string> = {
   number: 'Number',
@@ -22,6 +31,80 @@ export default function Settings() {
   const [freeStorageResult, setFreeStorageResult] = useState<
     { migratedCount: number; bytesFreed: number } | 'error' | null
   >(null);
+
+  // Storage meter (see lib/storageUsage.ts). The cap is measured once per
+  // browser and remembered; until that lands, the bar falls back to the
+  // documented typical figure and says so.
+  const [lsUsed, setLsUsed] = useState(() => localStorageUsedUnits());
+  const [lsCap, setLsCap] = useState<MeasuredCap | null>(() => readCachedCap());
+  const [photoStats, setPhotoStats] = useState<{ count: number; bytes: number } | 'unavailable' | null>(null);
+  const [originEstimate, setOriginEstimate] = useState<{ usage: number; quota: number } | null>(null);
+  // Stored photos no log entry points at (see lib/photoRefs.ts). null until
+  // counted.
+  const [unusedPhotoCount, setUnusedPhotoCount] = useState<number | null>(null);
+  const [clearUnusedOpen, setClearUnusedOpen] = useState(false);
+  const [clearedUnused, setClearedUnused] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureLocalStorageCapMeasured().then((c) => {
+      if (!cancelled && c) setLsCap(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Recomputed whenever the app's data changes or a migration finishes, so
+  // the numbers move after "Free up local storage" runs instead of going
+  // stale. Deferred one tick: DataProvider's save effect runs after this
+  // component's effects in the same commit, so reading localStorage
+  // immediately would still show the previous save.
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setLsUsed(localStorageUsedUnits());
+      sumPhotoBytes()
+        .then((s) => {
+          if (!cancelled) setPhotoStats(s);
+        })
+        .catch(() => {
+          if (!cancelled) setPhotoStats('unavailable');
+        });
+      getOriginEstimate().then((e) => {
+        if (!cancelled) setOriginEstimate(e);
+      });
+      listPhotoIds()
+        .then((ids) => {
+          if (cancelled) return;
+          const used = collectPhotoRefIds(data);
+          setUnusedPhotoCount(ids.filter((id) => !used.has(id)).length);
+        })
+        .catch(() => {
+          if (!cancelled) setUnusedPhotoCount(null);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [data, freeStorageResult]);
+
+  const lsCapForBar = lsCap?.cap ?? TYPICAL_LOCAL_STORAGE_CAP;
+  const lsPct = Math.min(100, Math.round((lsUsed / lsCapForBar) * 100));
+  const lsTone = storageTone(lsPct);
+
+  // Photo storage (IndexedDB). Its "cap" is the browser's own estimate for
+  // the whole site, used exactly as given: the bar is that estimate's usage
+  // over its quota, and it is fine if the bar never visibly fills. If the
+  // browser ever refuses a write for being over quota, that is reported
+  // separately by the save-failure banner, so the bar doesn't have to be
+  // precise to be useful.
+  const idbPct =
+    originEstimate && originEstimate.quota > 0
+      ? Math.min(100, (originEstimate.usage / originEstimate.quota) * 100)
+      : 0;
+  const idbTone = storageTone(idbPct);
 
   const [name, setName] = useState(activeTank?.name ?? '');
   const [sizeGallons, setSizeGallons] = useState(activeTank?.sizeGallons?.toString() ?? '');
@@ -71,6 +154,25 @@ export default function Settings() {
       setFreeStorageResult('error');
     } finally {
       setFreeingStorage(false);
+    }
+  }
+
+  // Re-lists at click time and compares against the data as it is right
+  // now, so nothing added since the count was taken can be removed.
+  async function clearUnusedPhotos() {
+    setClearUnusedOpen(false);
+    try {
+      const used = collectPhotoRefIds(data);
+      const unused = (await listPhotoIds()).filter((id) => !used.has(id));
+      await deletePhotos(unused);
+      setClearedUnused(unused.length);
+      setUnusedPhotoCount(0);
+      sumPhotoBytes()
+        .then(setPhotoStats)
+        .catch(() => setPhotoStats('unavailable'));
+      getOriginEstimate().then(setOriginEstimate);
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -370,15 +472,89 @@ export default function Settings() {
         </form>
       </div>
 
-      {/* legacyPhotoCount alone would make this card (success message
-          included) disappear the instant a migration succeeds — it drops
-          to 0 in the very same render that sets freeStorageResult, so the
-          confirmation would never actually be visible. Keeping the card up
-          while there's a result to show fixes that without changing when
-          the button/count messaging itself needs to appear. */}
-      {(legacyPhotoCount > 0 || freeStorageResult) && (
-        <div className="card p-5 space-y-3">
-          <p className="field-label">Local storage</p>
+      {/* Always shown now: the meter is useful on its own, long before
+          anything needs freeing. The migration messaging below still only
+          appears when there's something to migrate or a result to show —
+          legacyPhotoCount alone would make the success message vanish the
+          instant a migration succeeds (it drops to 0 in the same render
+          that sets freeStorageResult), hence the second condition. */}
+      <div className="card p-5 space-y-4">
+        <p className="field-label">Local storage</p>
+
+        <StorageMeter
+          label="Saved data"
+          used={formatStorage(lsUsed)}
+          cap={
+            lsCap
+              ? `${lsCap.atLeast ? 'at least ' : ''}${formatStorage(lsCap.cap)}`
+              : `about ${formatStorage(TYPICAL_LOCAL_STORAGE_CAP)}`
+          }
+          pct={lsPct}
+          tone={lsTone}
+          ariaLabel="Saved data used"
+        >
+          Your tanks, logs, roster and settings, plus any photos still stored the old way. Approximate —{' '}
+          {lsCap
+            ? "this browser's limit was measured once and is remembered."
+            : "still measuring this browser's limit; the bar uses the typical figure until then."}
+          {lsPct >= 80 && ' Getting close to the limit — exporting a backup is a good idea.'}
+        </StorageMeter>
+
+        {originEstimate ? (
+          <StorageMeter
+            label="Photos and other site storage"
+            used={formatStorage(originEstimate.usage)}
+            cap={formatStorage(originEstimate.quota)}
+            pct={idbPct}
+            tone={idbTone}
+            ariaLabel="Photo and site storage used"
+          >
+            {photoStats && photoStats !== 'unavailable'
+              ? `${photoStats.count} photo${photoStats.count === 1 ? '' : 's'}, about ${formatStorage(photoStats.bytes)}, kept in your browser's photo storage. `
+              : ''}
+            The limit is your browser's own rough estimate for this whole site, so treat the bar as a
+            guide: it may never visibly fill, and if the browser does run out of room, Tidemark will
+            tell you when a save fails.
+          </StorageMeter>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="text-sm text-foam">Photos</p>
+            <p className="font-display text-2xl font-semibold text-moss-light tabular-nums">
+              {photoStats === null
+                ? 'Checking…'
+                : photoStats === 'unavailable'
+                  ? 'Unavailable in this browser'
+                  : `${formatStorage(photoStats.bytes)} · ${photoStats.count} photo${photoStats.count === 1 ? '' : 's'}`}
+            </p>
+            <p className="text-xs text-foam-dim">
+              Kept in your browser's photo storage. This browser doesn't report a limit for it.
+            </p>
+          </div>
+        )}
+
+        {unusedPhotoCount !== null && unusedPhotoCount > 0 && (
+          <div className="rounded-lg border border-amber/40 bg-amber/5 p-3 space-y-2">
+            <p className="text-sm text-foam">
+              {unusedPhotoCount} stored photo{unusedPhotoCount === 1 ? ' is' : 's are'} not used by any
+              log entry.
+            </p>
+            <p className="text-xs text-foam-dim">
+              These are leftovers, for example from replacing a tank with an import or deleting a tank.
+              Nothing you can see in your tanks uses them, so removing them only frees space.
+            </p>
+            <button type="button" className="btn btn-secondary" onClick={() => setClearUnusedOpen(true)}>
+              Remove unused photos
+            </button>
+          </div>
+        )}
+        {clearedUnused !== null && (
+          <p className="text-xs text-moss-light" role="status">
+            Removed {clearedUnused} unused photo{clearedUnused === 1 ? '' : 's'}.
+          </p>
+        )}
+
+        {(legacyPhotoCount > 0 || freeStorageResult) && (
+        <div className="space-y-3">
           {legacyPhotoCount > 0 && (
             <p className="text-xs text-foam-dim">
               {legacyPhotoCount} photo{legacyPhotoCount === 1 ? '' : 's'} across every tank{' '}
@@ -412,7 +588,8 @@ export default function Settings() {
             </p>
           )}
         </div>
-      )}
+        )}
+      </div>
 
       <div className="card border-coral/30 p-5 space-y-3">
         <p className="field-label text-coral">Danger zone</p>
@@ -428,6 +605,15 @@ export default function Settings() {
       </div>
 
       <ConfirmModal
+        open={clearUnusedOpen}
+        title="Remove unused photos?"
+        message={`Remove ${unusedPhotoCount ?? 0} stored photo${unusedPhotoCount === 1 ? '' : 's'} that no log entry in any tank uses? This can't be undone.`}
+        confirmLabel="Remove photos"
+        danger
+        onConfirm={() => void clearUnusedPhotos()}
+        onCancel={() => setClearUnusedOpen(false)}
+      />
+      <ConfirmModal
         open={deleteConfirmOpen}
         title="Delete this tank?"
         message={`Delete "${activeTank.name}" and everything in it — roster, checklist, and every log entry? This can't be undone (unless you've exported a backup).`}
@@ -439,6 +625,64 @@ export default function Settings() {
         }}
         onCancel={() => setDeleteConfirmOpen(false)}
       />
+    </div>
+  );
+}
+
+// One decimal below 100 MB, none above: "10.2 MB" but "10250 MB".
+function formatStorage(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  if (bytes >= 100 * 1024 * 1024) return `${Math.round(mb)} MB`;
+  return formatBytes(bytes);
+}
+
+// Same thresholds the meter always used: amber from 70%, coral from 90%.
+function storageTone(pct: number): { bar: string; text: string } {
+  if (pct >= 90) return { bar: 'bg-coral', text: 'text-coral' };
+  if (pct >= 70) return { bar: 'bg-amber', text: 'text-amber' };
+  return { bar: 'bg-moss-light', text: 'text-moss-light' };
+}
+
+function StorageMeter({
+  label,
+  used,
+  cap,
+  pct,
+  tone,
+  ariaLabel,
+  children,
+}: {
+  label: string;
+  used: string;
+  cap: string;
+  pct: number;
+  tone: { bar: string; text: string };
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  // A nonzero amount always shows at least a sliver, so a tiny share of a
+  // huge limit doesn't read as an empty bar.
+  const width = pct > 0 ? Math.max(pct, 1.5) : 0;
+  const pctText = pct > 0 && pct < 1 ? 'under 1%' : `${Math.round(pct)}%`;
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-foam">{label}</p>
+      <p className="font-display tabular-nums leading-tight">
+        <span className={`text-3xl font-semibold ${tone.text}`}>{used}</span>
+        <span className="text-xl text-foam-dim"> / {cap}</span>
+        <span className="ml-3 text-sm text-foam-dim">{pctText} used</span>
+      </p>
+      <div
+        className="h-2.5 w-full rounded-full bg-foam/10 overflow-hidden"
+        role="progressbar"
+        aria-label={ariaLabel}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+      >
+        <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${width}%` }} />
+      </div>
+      <p className="text-xs text-foam-dim">{children}</p>
     </div>
   );
 }

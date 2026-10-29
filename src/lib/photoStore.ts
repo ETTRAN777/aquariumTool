@@ -86,6 +86,48 @@ export async function deletePhotos(ids: string[]): Promise<void> {
   });
 }
 
+// How much the stored photos actually weigh: the summed Blob sizes, which
+// is the honest number for the IndexedDB half of Settings' storage meter
+// (navigator.storage.estimate() can only report the whole origin combined,
+// so it can't isolate "just the photos"). Reads each record's Blob handle
+// through a cursor — Blob.size is metadata, so this doesn't pull the image
+// bytes into memory.
+export async function sumPhotoBytes(): Promise<{ count: number; bytes: number }> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).openCursor();
+    let count = 0;
+    let bytes = 0;
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (cursor) {
+        const blob = cursor.value?.blob as Blob | undefined;
+        if (blob && typeof blob.size === 'number') {
+          count += 1;
+          bytes += blob.size;
+        }
+        cursor.continue();
+      } else {
+        resolve({ count, bytes });
+      }
+    };
+    req.onerror = () => reject(req.error ?? new Error('Could not measure photo storage.'));
+  });
+}
+
+// Every id currently stored, for finding Blobs nothing references anymore
+// (see photoRefs.ts). Keys only, so no image data is read.
+export async function listPhotoIds(): Promise<string[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAllKeys();
+    req.onsuccess = () => resolve(req.result.map(String));
+    req.onerror = () => reject(req.error ?? new Error('Could not list stored photos.'));
+  });
+}
+
 // The reference format a photoUrls entry can hold, alongside a real data
 // URI (legacy — see resizeImageToBase64's callers) or, per the type's own
 // long-standing comment, a real relative path. An <img> tag can render

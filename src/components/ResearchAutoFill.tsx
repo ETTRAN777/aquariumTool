@@ -18,7 +18,11 @@ function formatAnswer(f: ParsedAnswer, kind: ParsedField['kind']): string {
     return `${f.min ?? '—'}–${f.max ?? '—'}`;
   }
   if (f.single !== undefined) {
-    return kind === 'mouthSize' ? `${f.single} mm` : kind === 'adultSize' ? `${f.single} in` : String(f.single);
+    return kind === 'mouthSize' || kind === 'juvenileSize'
+      ? `${f.single} mm`
+      : kind === 'adultSize'
+        ? `${f.single} in`
+        : String(f.single);
   }
   return '—';
 }
@@ -70,6 +74,7 @@ export default function ResearchAutoFill({
     let waterParamTargets = { ...item.waterParamTargets };
     let mouthSizeMm = item.mouthSizeMm;
     let adultSizeIn = item.adultSizeIn;
+    let juvenileSizeMm = item.juvenileSizeMm;
     let traits = [...(item.traits ?? [])];
     let applied = 0;
 
@@ -92,6 +97,9 @@ export default function ResearchAutoFill({
       } else if (f.kind === 'adultSize' && answer.single !== undefined) {
         adultSizeIn = answer.single;
         applied++;
+      } else if (f.kind === 'juvenileSize' && answer.single !== undefined) {
+        juvenileSizeMm = answer.single;
+        applied++;
       } else if (f.kind === 'trait' && f.traitLabel && f.traitType) {
         const value = answer.boolValue ?? answer.text ?? answer.single;
         if (value === undefined) continue;
@@ -105,7 +113,7 @@ export default function ResearchAutoFill({
       }
     }
 
-    updateRosterItem({ ...item, waterParamTargets, mouthSizeMm, adultSizeIn, traits });
+    updateRosterItem({ ...item, waterParamTargets, mouthSizeMm, adultSizeIn, juvenileSizeMm, traits });
     setAppliedCount(applied);
     setFields(null);
     setPasted('');
