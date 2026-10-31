@@ -1,19 +1,69 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../lib/DataContext';
 import { useConfirmDelete } from '../lib/useConfirmDelete';
 import { STATUS_ORDER, STATUS_LABELS, CATEGORY_LABELS, statusMeetsRequirement } from '../lib/constants';
-import type { RosterItem, SourcingStatus } from '../types';
+import type { RosterItem, SourcingStatus, Tank } from '../types';
 import AutoResizeTextarea from '../components/AutoResizeTextarea';
+import {
+  sortByGroup,
+  sectionsByGroup,
+  addGroup,
+  renameGroup,
+  deleteGroup,
+  moveGroup,
+  assignItemToGroup,
+  MAX_GROUP_NAME_LENGTH,
+  type GroupResult,
+} from '../lib/rosterGroups';
 
 type SortMode = 'default' | 'category' | 'status';
 
 export default function Roster() {
-  const { activeTank, addRosterItem, updateRosterItem, deleteRosterItem } = useData();
+  const { activeTank, addRosterItem, updateRosterItem, deleteRosterItem, updateTank } = useData();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<RosterItem['category'] | 'all'>('all');
   const [sortMode, setSortMode] = useState<SortMode>('default');
   const { pendingId: pendingDeleteId, handleClick: handleDeleteClick } = useConfirmDelete();
+  // Roster groups (lib/rosterGroups.ts) — only the Default view uses them.
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  // Which section is being dragged over: a group name, or '' for ungrouped.
+  const [dragOver, setDragOver] = useState<string | null>(null);
+
+  // Browsers barely auto-scroll while a card is being dragged, so a group
+  // further than one screen away was unreachable. While dragging, scroll the
+  // page ourselves whenever the pointer is near the top or bottom edge.
+  useEffect(() => {
+    if (dragId === null) return;
+    const EDGE = 100; // px from the viewport edge where scrolling starts
+    const MAX_SPEED = 24; // px per frame, reached right at the edge
+    let pointerY: number | null = null;
+    let frame = 0;
+    const onDragOver = (e: DragEvent) => {
+      pointerY = e.clientY;
+    };
+    const tick = () => {
+      if (pointerY !== null) {
+        const fromBottom = window.innerHeight - pointerY;
+        let speed = 0;
+        if (pointerY < EDGE) speed = -MAX_SPEED * Math.min(1, (EDGE - pointerY) / EDGE);
+        else if (fromBottom < EDGE) speed = MAX_SPEED * Math.min(1, (EDGE - fromBottom) / EDGE);
+        if (speed !== 0) window.scrollBy(0, speed);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    document.addEventListener('dragover', onDragOver);
+    frame = requestAnimationFrame(tick);
+    return () => {
+      document.removeEventListener('dragover', onDragOver);
+      cancelAnimationFrame(frame);
+    };
+  }, [dragId]);
 
   if (!activeTank) return null;
 
@@ -57,8 +107,23 @@ export default function Roster() {
     // floating within it; with all shown, it's the only way starring
     // means anything visible, since nothing else groups categories
     // together for it to float within.
-    items = [...items].sort(starredTiebreak);
+    //
+    // With roster groups defined, the user's own group order is the
+    // primary key and starred only breaks ties inside a group — the same
+    // bucket-first shape as the category and status sorts above, so a
+    // star can never lift an item out of its group.
+    const listed = activeTank.rosterGroups ?? [];
+    items = listed.length > 0 ? sortByGroup(items, listed, starredTiebreak) : [...items].sort(starredTiebreak);
   }
+
+  const groups = activeTank.rosterGroups ?? [];
+  // Groups apply in every sort: the active sort orders items inside each
+  // group instead of replacing the groups.
+  const groupsOn = groups.length > 0;
+  const sections = groupsOn ? sectionsByGroup(items, groups, activeTank.rosterGroupScopes, filter) : null;
+  // The groups shown under the current filter, in list order; the move
+  // arrows are relative to these, not to groups hidden by the filter.
+  const visibleGroups = sections ? sections.flatMap((s) => (s.name === null ? [] : [s.name])) : [];
 
   // Items still at "Idea" haven't actually been committed to yet, so they
   // don't count toward either number below — only once something's
@@ -105,11 +170,22 @@ export default function Roster() {
     const sortLabel =
       sortMode === 'default' ? 'Default order' : sortMode === 'category' ? 'By category' : 'By status';
     const lines = [`Roster — ${filterLabel}, ${sortLabel}`, ''];
-    for (const item of items) {
+    const pushItem = (item: RosterItem) => {
       const qty = item.quantity && item.quantity > 1 ? `${item.quantity}x ` : '';
       const status = STATUS_LABELS[item.status];
       const detail = variant === 'full' && item.detail ? ` — ${item.detail}` : '';
       lines.push(`- ${qty}${item.name} (${status})${detail}`);
+    };
+    if (sections) {
+      for (const section of sections) {
+        if (section.items.length === 0) continue;
+        if (section.name !== null) lines.push(`${section.name}:`);
+        section.items.forEach(pushItem);
+        lines.push('');
+      }
+      while (lines[lines.length - 1] === '') lines.pop();
+    } else {
+      items.forEach(pushItem);
     }
     if (items.length === 0) lines.push('(Nothing matches this filter.)');
     navigator.clipboard
@@ -130,84 +206,43 @@ export default function Roster() {
     updateRosterItem({ ...item, status: next });
   }
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div>
-          <h2 className="font-display text-2xl font-semibold">Roster</h2>
-          <p className="text-sm text-foam-dim mt-1">
-            Everything going into the tank — click a status pill to advance it.
-            {estimateTotal > 0 && (
-              <span className="font-mono text-foam ml-2">
-                {allBudgetedItemsOrdered
-                  ? `· $${actualTotal.toFixed(2)} total cost`
-                  : actualTotal > 0
-                    ? `· ~$${estimateTotal.toFixed(2)} estimated · $${actualTotal.toFixed(2)} actual`
-                    : `· ~$${estimateTotal.toFixed(2)} estimated`}
-              </span>
-            )}
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setEditingId(null);
-            setShowForm((s) => !s);
-          }}
-          className="btn btn-primary self-start"
-        >
-          {showForm ? 'Cancel' : '+ Add item'}
-        </button>
-      </div>
+  // Runs a groups operation against the latest tank and reports its error
+  // (a blank or duplicate name) back to the page.
+  function applyGroupChange(change: (tank: Tank) => GroupResult): boolean {
+    let error: string | undefined;
+    updateTank((tank) => {
+      const result = change(tank);
+      if (result.error !== undefined) {
+        error = result.error;
+        return tank;
+      }
+      return result.tank;
+    });
+    setGroupError(error ?? null);
+    return error === undefined;
+  }
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
-          <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
-          {(Object.keys(CATEGORY_LABELS) as RosterItem['category'][]).map((cat) => (
-            <FilterPill
-              key={cat}
-              active={filter === cat}
-              onClick={() => setFilter(cat)}
-              label={CATEGORY_LABELS[cat]}
-            />
-          ))}
-        </div>
-        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
-          <SortPill active={sortMode === 'default'} onClick={() => setSortMode('default')} label="Default order" />
-          <SortPill active={sortMode === 'category'} onClick={() => setSortMode('category')} label="By category" />
-          <SortPill active={sortMode === 'status'} onClick={() => setSortMode('status')} label="By status" />
-        </div>
-      </div>
+  function submitNewGroup() {
+    if (applyGroupChange((t) => addGroup(t, newGroupName, filter === 'all' ? undefined : filter))) {
+      setNewGroupName('');
+      setAddingGroup(false);
+    }
+  }
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => copyRosterList('full')}
-          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
-        >
-          {copiedList === 'full' ? '✓ Copied to clipboard' : '📋 Copy visible list'}
-        </button>
-        <span className="text-foam-dim/30 text-xs">·</span>
-        <button
-          onClick={() => copyRosterList('no-desc')}
-          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
-        >
-          {copiedList === 'no-desc' ? '✓ Copied to clipboard' : 'no description'}
-        </button>
-      </div>
+  function submitRename(from: string) {
+    if (applyGroupChange((t) => renameGroup(t, from, renameDraft))) {
+      setRenamingGroup(null);
+    }
+  }
 
-      {showForm && (
-        <ItemForm
-          onSubmit={(item) => {
-            addRosterItem(item);
-            setShowForm(false);
-          }}
-          onCancel={() => setShowForm(false)}
-          submitLabel="Add to roster"
-          defaultCategory={filter !== 'all' ? filter : undefined}
-        />
-      )}
+  function dropOnGroup(group: string | undefined, itemId: string) {
+    updateTank((tank) => assignItemToGroup(tank, itemId, group));
+    setDragId(null);
+    setDragOver(null);
+  }
 
-      <div className="grid gap-3">
-        {items.map((item) =>
+  function renderItem(item: RosterItem) {
+    return (
           editingId === item.id ? (
             <ItemForm
               key={item.id}
@@ -219,13 +254,24 @@ export default function Roster() {
               onCancel={() => setEditingId(null)}
               submitLabel="Save changes"
               editing
+              groups={groups}
             />
           ) : (
             <div
               key={item.id}
+              draggable={groupsOn}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('text/plain', item.id);
+                e.dataTransfer.effectAllowed = 'move';
+                setDragId(item.id);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setDragOver(null);
+              }}
               className={`card p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${
                 item.status === 'idea' ? 'border-dashed opacity-70' : ''
-              }`}
+              } ${groupsOn ? 'cursor-grab' : ''} ${dragId === item.id ? 'opacity-40' : ''}`}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -311,8 +357,216 @@ export default function Roster() {
               </div>
             </div>
           )
-        )}
-        {items.length === 0 && (
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Roster</h2>
+          <p className="text-sm text-foam-dim mt-1">
+            Everything going into the tank — click a status pill to advance it.
+            {estimateTotal > 0 && (
+              <span className="font-mono text-foam ml-2">
+                {allBudgetedItemsOrdered
+                  ? `· $${actualTotal.toFixed(2)} total cost`
+                  : actualTotal > 0
+                    ? `· ~$${estimateTotal.toFixed(2)} estimated · $${actualTotal.toFixed(2)} actual`
+                    : `· ~$${estimateTotal.toFixed(2)} estimated`}
+              </span>
+            )}
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            setEditingId(null);
+            setShowForm((s) => !s);
+          }}
+          className="btn btn-primary self-start"
+        >
+          {showForm ? 'Cancel' : '+ Add item'}
+        </button>
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
+          <FilterPill active={filter === 'all'} onClick={() => setFilter('all')} label="All" />
+          {(Object.keys(CATEGORY_LABELS) as RosterItem['category'][]).map((cat) => (
+            <FilterPill
+              key={cat}
+              active={filter === cat}
+              onClick={() => setFilter(cat)}
+              label={CATEGORY_LABELS[cat]}
+            />
+          ))}
+        </div>
+        <div className="flex flex-nowrap md:flex-wrap gap-2 overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
+          <SortPill active={sortMode === 'default'} onClick={() => setSortMode('default')} label="Default order" />
+          <SortPill active={sortMode === 'category'} onClick={() => setSortMode('category')} label="By category" />
+          <SortPill active={sortMode === 'status'} onClick={() => setSortMode('status')} label="By status" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => copyRosterList('full')}
+          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedList === 'full' ? '✓ Copied to clipboard' : '📋 Copy visible list'}
+        </button>
+        <span className="text-foam-dim/30 text-xs">·</span>
+        <button
+          onClick={() => copyRosterList('no-desc')}
+          className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+        >
+          {copiedList === 'no-desc' ? '✓ Copied to clipboard' : 'no description'}
+        </button>
+        <>
+            <span className="text-foam-dim/30 text-xs">·</span>
+            {addingGroup ? (
+              <form
+                className="flex items-center gap-2 flex-wrap"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitNewGroup();
+                }}
+              >
+                <input
+                  autoFocus
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setAddingGroup(false);
+                      setGroupError(null);
+                    }
+                  }}
+                  placeholder="Group name"
+                  aria-label="New group name"
+                  maxLength={MAX_GROUP_NAME_LENGTH}
+                  className="field py-1 text-sm w-40"
+                />
+                <button type="submit" className="font-mono text-xs text-amber hover:underline">
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddingGroup(false);
+                    setGroupError(null);
+                  }}
+                  className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+                >
+                  Cancel
+                </button>
+                {groupError && <span className="text-xs text-coral">{groupError}</span>}
+              </form>
+            ) : (
+              <button
+                onClick={() => {
+                  setGroupError(null);
+                  setAddingGroup(true);
+                }}
+                className="font-mono text-xs text-foam-dim/70 hover:text-amber transition-colors"
+              >
+                + Add group
+              </button>
+            )}
+          </>
+      </div>
+
+      {showForm && (
+        <ItemForm
+          onSubmit={(item) => {
+            addRosterItem(item);
+            setShowForm(false);
+          }}
+          onCancel={() => setShowForm(false)}
+          submitLabel="Add to roster"
+          defaultCategory={filter !== 'all' ? filter : undefined}
+          groups={groups}
+        />
+      )}
+
+      <div className="grid gap-3">
+        {sections
+          ? sections.map((section) => {
+              const key = section.name ?? '';
+              // The ungrouped drop zone only exists while something is being
+              // dragged (or when there are ungrouped items to show), so a
+              // fully grouped roster has no extra element at the bottom.
+              if (section.name === null && section.items.length === 0 && !dragId) return null;
+              // Under a filter that shows none of the groups, the ungrouped
+              // items are just the list: no divider, and nothing to drop on.
+              const anyGroupShown = sections.some((x) => x.name !== null);
+              if (section.name === null && !anyGroupShown) return <div key="__ungrouped__" className="grid gap-3">{section.items.map(renderItem)}</div>;
+              return (
+                <section
+                  key={key || '__ungrouped__'}
+                  onDragOver={(e) => {
+                    if (!dragId) return;
+                    e.preventDefault();
+                    setDragOver(key);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                      setDragOver((cur) => (cur === key ? null : cur));
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (!dragId) return;
+                    e.preventDefault();
+                    dropOnGroup(section.name ?? undefined, dragId);
+                  }}
+                  className={`grid gap-3 rounded-lg transition-colors ${
+                    dragOver === key ? 'bg-amber/5 outline outline-1 outline-amber/40 -m-2 p-2' : ''
+                  }`}
+                >
+                  <GroupHeader
+                    name={section.name}
+                    index={section.name === null ? -1 : visibleGroups.indexOf(section.name)}
+                    total={visibleGroups.length}
+                    renaming={section.name !== null && renamingGroup === section.name}
+                    renameDraft={renameDraft}
+                    onRenameDraft={setRenameDraft}
+                    onStartRename={() => {
+                      if (section.name === null) return;
+                      setGroupError(null);
+                      setRenameDraft(section.name);
+                      setRenamingGroup(section.name);
+                    }}
+                    onSubmitRename={() => {
+                      if (section.name !== null) submitRename(section.name);
+                    }}
+                    onCancelRename={() => {
+                      setRenamingGroup(null);
+                      setGroupError(null);
+                    }}
+                    onMove={(dir) => {
+                      if (section.name !== null) updateTank((t) => moveGroup(t, section.name!, dir, visibleGroups));
+                    }}
+                    confirmingDelete={pendingDeleteId === `group:${section.name}`}
+                    onDelete={() => {
+                      if (section.name === null) return;
+                      handleDeleteClick(`group:${section.name}`, () =>
+                        updateTank((t) => deleteGroup(t, section.name!))
+                      );
+                    }}
+                    error={section.name !== null && renamingGroup === section.name ? groupError : null}
+                    dragging={dragId !== null}
+                  />
+                  {section.items.map(renderItem)}
+                  {section.name !== null && section.items.length === 0 && (
+                    <p className="text-xs text-foam-dim/60 px-1">
+                      Nothing in this group yet. Drag items here, or choose a group when editing an item.
+                    </p>
+                  )}
+                </section>
+              );
+            })
+          : items.map(renderItem)}
+        {items.length === 0 && !sections && (
           <p className="text-foam-dim text-sm py-8 text-center">Nothing here yet.</p>
         )}
       </div>
@@ -390,6 +644,7 @@ function ItemForm({
   submitLabel,
   editing = false,
   defaultCategory,
+  groups,
 }: {
   initial?: RosterItem;
   onSubmit: (item: RosterItem) => void;
@@ -400,6 +655,9 @@ function ItemForm({
   // uses that item's own real category regardless of whatever filter
   // happens to be active on the page behind it.
   defaultCategory?: RosterItem['category'];
+  // The tank's own roster groups; the Group picker only shows when there are
+  // any, so a roster without groups sees no new control.
+  groups: string[];
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [category, setCategory] = useState<RosterItem['category']>(initial?.category ?? defaultCategory ?? 'plant');
@@ -408,6 +666,7 @@ function ItemForm({
   const [source, setSource] = useState(initial?.source ?? '');
   const [quantity, setQuantity] = useState(initial?.quantity?.toString() ?? '');
   const [cost, setCost] = useState(initial?.cost?.toString() ?? '');
+  const [group, setGroup] = useState(initial?.group ?? '');
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -419,7 +678,11 @@ function ItemForm({
     // field were left empty, not silently written as-is.
     const parsedQuantity = quantity ? Number(quantity) : undefined;
     const parsedCost = cost ? Number(cost) : undefined;
-    onSubmit({
+    // Start from the item being edited so everything this form doesn't
+    // show (stars, notes, compatibility traits and sizes, group) survives a
+    // save instead of being dropped.
+    const next: RosterItem = {
+      ...initial,
       id: initial?.id ?? crypto.randomUUID(),
       name: name.trim(),
       category,
@@ -428,7 +691,10 @@ function ItemForm({
       source: source.trim() || undefined,
       quantity: parsedQuantity !== undefined && parsedQuantity >= 0 ? parsedQuantity : undefined,
       cost: parsedCost !== undefined && parsedCost >= 0 ? parsedCost : undefined,
-    });
+    };
+    if (group) next.group = group;
+    else delete next.group;
+    onSubmit(next);
   }
 
   return (
@@ -483,6 +749,21 @@ function ItemForm({
         onChange={(e) => setCost(e.target.value)}
         className="field"
       />
+      {groups.length > 0 && (
+        <select
+          value={group}
+          onChange={(e) => setGroup(e.target.value)}
+          className="field sm:col-span-2"
+          aria-label="Group"
+        >
+          <option value="">No group</option>
+          {groups.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+      )}
       <AutoResizeTextarea
         placeholder="Detail (optional)"
         value={detail}
@@ -504,5 +785,127 @@ function ItemForm({
         </button>
       </div>
     </form>
+  );
+}
+
+// The divider above each group: its name, a rule, and small borderless
+// controls on the right end of the rule (move up/down, rename, delete). The
+// ungrouped section at the bottom has a rule but no name or controls — and
+// only shows its rule while groups exist and something is being dragged or
+// there are ungrouped items.
+function GroupHeader({
+  name,
+  index,
+  total,
+  renaming,
+  renameDraft,
+  onRenameDraft,
+  onStartRename,
+  onSubmitRename,
+  onCancelRename,
+  onMove,
+  confirmingDelete,
+  onDelete,
+  error,
+  dragging,
+}: {
+  name: string | null;
+  index: number;
+  total: number;
+  renaming: boolean;
+  renameDraft: string;
+  onRenameDraft: (v: string) => void;
+  onStartRename: () => void;
+  onSubmitRename: () => void;
+  onCancelRename: () => void;
+  onMove: (dir: -1 | 1) => void;
+  confirmingDelete: boolean;
+  onDelete: () => void;
+  error: string | null;
+  dragging: boolean;
+}) {
+  const control =
+    'px-1.5 py-1 text-xs text-foam-dim/60 hover:text-amber transition-colors disabled:opacity-25 disabled:hover:text-foam-dim/60';
+  if (name === null) {
+    return (
+      <div className="flex items-center gap-3" aria-hidden={!dragging}>
+        <div className="h-px flex-1 bg-moss/30" />
+        {dragging && <span className="text-xs text-foam-dim/60">Drop here to take out of its group</span>}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        {renaming ? (
+          <input
+            autoFocus
+            value={renameDraft}
+            onChange={(e) => onRenameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                onSubmitRename();
+              } else if (e.key === 'Escape') {
+                onCancelRename();
+              }
+            }}
+            onBlur={onCancelRename}
+            aria-label={`Rename group ${name}`}
+            maxLength={MAX_GROUP_NAME_LENGTH}
+            className="field py-1 text-sm w-44"
+          />
+        ) : (
+          <h3 className="font-display text-base font-semibold text-foam">{name}</h3>
+        )}
+        <div className="h-px flex-1 bg-moss/30" />
+        <div className="flex items-center">
+          <button
+            type="button"
+            className={control}
+            onClick={() => onMove(-1)}
+            disabled={index <= 0}
+            aria-label={`Move ${name} up`}
+            title="Move group up"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className={control}
+            onClick={() => onMove(1)}
+            disabled={index >= total - 1}
+            aria-label={`Move ${name} down`}
+            title="Move group down"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            className={control}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onStartRename}
+            aria-label={`Rename ${name}`}
+            title="Rename group"
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            className={`${control} ${confirmingDelete ? '!text-amber' : ''}`}
+            onClick={onDelete}
+            aria-label={
+              confirmingDelete
+                ? `Click again to delete group ${name} (its items are kept)`
+                : `Delete group ${name}`
+            }
+            title={confirmingDelete ? 'Click again — items are kept, just ungrouped' : 'Delete group (items are kept)'}
+          >
+            {confirmingDelete ? '✓' : '✕'}
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-coral mt-1">{error}</p>}
+    </div>
   );
 }

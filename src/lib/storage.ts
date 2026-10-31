@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { seedData } from '../data/seed';
 import { getPhoto, putPhoto, makePhotoRef, isStoredPhotoRef, photoRefId } from './photoStore';
+import { normalizeGroupName, reconcileGroups } from './rosterGroups';
 import {
   NAME_MAX_LENGTH,
   STYLE_MAX_LENGTH,
@@ -273,6 +274,13 @@ function normalizeRosterItem(
   // Tank.customFields), so there's no fixed set of options to validate
   // against — nothing here for an import to get "wrong" in the way a
   // category or status can be.
+  let group: string | undefined;
+  if (typeof raw.group === 'string') {
+    group = normalizeGroupName(raw.group) || undefined;
+  } else if (raw.group !== undefined) {
+    warnings.push(`"${name}"'s group was an unexpected type in the import — dropped.`);
+  }
+
   const item: RosterItem = {
     id,
     name,
@@ -290,6 +298,7 @@ function normalizeRosterItem(
     ...(juvenileSizeMm !== undefined ? { juvenileSizeMm } : {}),
     ...(predatorRiskOverride !== undefined ? { predatorRiskOverride } : {}),
     ...(raw.traits !== undefined ? { traits: raw.traits } : {}),
+    ...(group !== undefined ? { group } : {}),
   };
 
   return { item, warnings };
@@ -822,6 +831,10 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
     return task;
   });
 
+  // Roster groups: clean the ordered list and make sure every group an item
+  // names is in it (see reconcileGroups).
+  const reconciled = reconcileGroups(roster, raw.rosterGroups, raw.rosterGroupScopes);
+
   const tank: Tank = {
     id,
     name,
@@ -832,12 +845,14 @@ function normalizeTank(raw: any): { tank: Tank; warnings: string[] } {
     style,
     startDate,
     customFields,
-    roster,
+    roster: reconciled.roster,
     checklist,
     logs,
     schedule,
     milestones,
     waterType: raw.waterType === 'saltwater' ? 'saltwater' : 'freshwater',
+    ...(reconciled.rosterGroups.length > 0 ? { rosterGroups: reconciled.rosterGroups } : {}),
+    ...(Object.keys(reconciled.rosterGroupScopes).length > 0 ? { rosterGroupScopes: reconciled.rosterGroupScopes } : {}),
   };
 
   return { tank, warnings };

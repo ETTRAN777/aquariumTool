@@ -74,6 +74,9 @@ export interface RosterItem {
   // fully custom one. Unlike mouth/adult size, these are just recorded
   // for the user's own reference.
   traits?: RosterItemTrait[];
+  // Name of the group this item belongs to (see Tank.rosterGroups and
+  // lib/rosterGroups.ts). Unset = ungrouped.
+  group?: string;
 }
 
 export interface RosterLink {
@@ -308,6 +311,13 @@ export interface Tank {
   logs: LogEntry[];
   schedule: ScheduleTask[];
   milestones: Milestone[];
+  // The user's own roster groups, in the order they show in the Roster's
+  // default view. Omitted until the first group is created.
+  rosterGroups?: string[];
+  // Which Roster category filter a group was created under, keyed by group
+  // name. A group listed here shows only under "All" and that category; a
+  // group with no entry (created under "All") shows under every filter.
+  rosterGroupScopes?: Record<string, RosterItem['category']>;
 }
 
 // --- Recommended-roster questionnaire ---

@@ -49,9 +49,10 @@ export default function TankSwitcher({
         aria-haspopup="listbox"
         aria-expanded={open}
         title={activeTank.name}
+        data-tank-title
         className="font-display text-3xl md:text-4xl font-semibold text-foam bg-transparent border-none outline-none cursor-pointer -ml-1 max-w-full min-w-0 flex items-center gap-1.5 text-left leading-tight hover:text-amber transition-colors"
       >
-        <span className="truncate min-w-0">{activeTank.name}</span>
+        <span className="truncate min-w-0" data-tank-title-text>{activeTank.name}</span>
         <svg
           width="20"
           height="20"

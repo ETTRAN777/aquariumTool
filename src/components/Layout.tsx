@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/DataContext';
 import { exportData, serializeBackup, stripPhotos, formatBytes } from '../lib/storage';
@@ -24,6 +24,12 @@ const navItems = [
   { to: '/charts', label: 'Parameters' },
 ];
 
+// The least width the tank name is guaranteed before the nav gives up and
+// drops below it. A name shorter than this is guaranteed in full; a longer
+// one is allowed to shrink down to this and truncate with an ellipsis
+// ("The Shrimp Ta…") rather than push the nav onto its own row.
+const MIN_TITLE_CLEARANCE_REM = 12;
+
 export default function Layout() {
   const {
     activeTank,
@@ -36,6 +42,71 @@ export default function Layout() {
     clearRosterStatusSync,
   } = useData();
   const navigate = useNavigate();
+
+  // Header layout. The nav sits beside the tank title only when BOTH fit:
+  // the nav at its full single-line width, and the title at its natural
+  // width (floored; see MIN_TITLE_CLEARANCE_REM). Otherwise the nav drops
+  // below the title as its own scrollable row — the layout phones always
+  // got — at any window size, instead of squeezing the title to nothing or
+  // wrapping the nav over it. Nothing here is a pixel breakpoint: both
+  // sides are measured from the rendered content, so a longer tank name,
+  // a wider font or a changed label moves the switch point by itself.
+  const headerRef = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const [stacked, setStacked] = useState(false);
+  const hasTank = Boolean(activeTank);
+
+  function measureHeader() {
+    const header = headerRef.current;
+    const nav = navRef.current;
+    if (!header || !nav || nav.children.length === 0) return;
+    const headerStyle = getComputedStyle(header);
+    const available =
+      header.clientWidth - parseFloat(headerStyle.paddingLeft) - parseFloat(headerStyle.paddingRight);
+    // The nav's natural single-line width: its items never shrink, so it is
+    // just their widths, margins and gaps added up. Summed rather than read
+    // off first-left to last-right, because the stacked layout can scroll the nav
+    // sideways, which makes its own box narrower than its content.
+    const navStyle = getComputedStyle(nav);
+    const itemGap = parseFloat(navStyle.columnGap) || 0;
+    let navWidth = itemGap * (nav.children.length - 1);
+    for (const child of Array.from(nav.children)) {
+      const cs = getComputedStyle(child);
+      navWidth +=
+        child.getBoundingClientRect().width + parseFloat(cs.marginLeft) + parseFloat(cs.marginRight);
+    }
+    // The title's natural width: its full text (scrollWidth ignores the
+    // ellipsis clipping) plus the chevron and spacing around it.
+    const button = header.querySelector<HTMLElement>('[data-tank-title]');
+    const text = header.querySelector<HTMLElement>('[data-tank-title-text]');
+    let titleWidth = 0;
+    if (button && text) {
+      titleWidth = text.scrollWidth + (button.offsetWidth - text.offsetWidth);
+    }
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    titleWidth = Math.min(titleWidth, MIN_TITLE_CLEARANCE_REM * rem);
+    const gap = parseFloat(headerStyle.columnGap) || 0;
+    setStacked(navWidth + gap + titleWidth > available);
+  }
+
+  // Before paint, so there is never a frame of the wrong layout.
+  useLayoutEffect(() => {
+    measureHeader();
+  });
+
+  useEffect(() => {
+    const header = headerRef.current;
+    const nav = navRef.current;
+    if (!header || !nav) return;
+    const observer = new ResizeObserver(() => measureHeader());
+    observer.observe(header);
+    for (const child of Array.from(nav.children)) observer.observe(child);
+    // Web fonts changing widths after first paint.
+    void document.fonts?.ready.then(measureHeader);
+    return () => observer.disconnect();
+    // measureHeader only reads refs and the DOM.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasTank]);
 
   // One-time, idle-time measurement of this browser's localStorage limit
   // for Settings' storage meter. A no-op once a number has been recorded —
@@ -92,7 +163,12 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-deepwater text-foam font-body">
-      <header className="border-b border-moss/30 px-6 md:px-10 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <header
+        ref={headerRef}
+        className={`border-b border-moss/30 px-6 md:px-10 py-4 flex gap-4 ${
+          stacked ? 'flex-col' : 'flex-row items-center justify-between'
+        }`}
+      >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-mono text-xs tracking-widest text-sand uppercase">
@@ -106,7 +182,14 @@ export default function Layout() {
             onNewTank={() => navigate('/new-tank')}
           />
         </div>
-        <nav className="flex flex-nowrap md:flex-wrap gap-1 items-center overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 md:overflow-visible">
+        <nav
+          ref={navRef}
+          className={`flex gap-1 items-center ${
+            stacked
+              ? 'flex-nowrap overflow-x-auto scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0'
+              : 'flex-nowrap shrink-0'
+          }`}
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.to}
